@@ -10,6 +10,7 @@
             <li><a href="/admin">仪表盘</a></li>
             <li><a href="/admin/interviews" class="active">面试场次管理</a></li>
             <li><a href="/admin/interviewers">面试官管理</a></li>
+            <li><a href="/admin/users">用户管理</a></li>
             <li><a href="/admin/results">面试结果查看</a></li>
             <li><a href="/logout">退出登录</a></li>
         </ul>
@@ -98,6 +99,26 @@
         <div id="timeSlotList"></div>
     </div>
 </div>
+
+<!-- 房间管理弹窗 -->
+<div class="modal" id="roomModal">
+    <div class="modal-content">
+        <div class="modal-header">
+            <h3>管理面试房间</h3>
+            <button class="modal-close" onclick="closeRoomModal()">&times;</button>
+        </div>
+        <input type="hidden" id="roomInterviewId">
+        <div class="form-group">
+            <label>添加面试房间</label>
+            <div class="form-row">
+                <input type="text" id="roomName" placeholder="房间名称，如：面试室A">
+                <input type="number" id="roomCapacity" placeholder="容量" value="5" min="1" style="width: 80px;">
+            </div>
+            <button class="btn btn-success btn-sm" onclick="addRoom()">添加</button>
+        </div>
+        <div id="roomList"></div>
+    </div>
+</div>
 {% endblock %}
 
 {% block extra_js %}
@@ -128,6 +149,7 @@ async function loadInterviews() {
                 <td>
                     <div class="action-buttons">
                         <button class="btn btn-sm btn-secondary" onclick="manageTimeSlots(${interview.id})">时间段</button>
+                        <button class="btn btn-sm btn-info" onclick="manageRooms(${interview.id})">房间</button>
                         <button class="btn btn-sm btn-primary" onclick="editInterview(${interview.id}, '${interview.title}', '${interview.date || ''}', '${interview.location || ''}', '${interview.positions ? interview.positions.join(',') : ''}', '${interview.note || ''}')">编辑</button>
                         <button class="btn btn-sm btn-danger" onclick="deleteInterview(${interview.id})">删除</button>
                     </div>
@@ -302,6 +324,90 @@ async function deleteTimeSlot(slotId) {
 
 function closeTimeSlotModal() {
     document.getElementById('timeSlotModal').classList.remove('show');
+}
+
+// 房间管理
+async function manageRooms(interviewId) {
+    document.getElementById('roomInterviewId').value = interviewId;
+    await loadRooms(interviewId);
+    document.getElementById('roomModal').classList.add('show');
+}
+
+async function loadRooms(interviewId) {
+    try {
+        const response = await fetch(`/api/interviews/${interviewId}/rooms`);
+        const rooms = await response.json();
+
+        const container = document.getElementById('roomList');
+        if (rooms.length === 0) {
+            container.innerHTML = '<p style="color:#999;">暂无面试房间</p>';
+            return;
+        }
+
+        container.innerHTML = '<table><thead><tr><th>房间名称</th><th>容量</th><th>已报名</th><th>操作</th></tr></thead><tbody></tbody></table>';
+        const tbody = container.querySelector('tbody');
+
+        rooms.forEach(room => {
+            const tr = document.createElement('tr');
+            tr.innerHTML = `
+                <td>${room.name}</td>
+                <td>${room.capacity}</td>
+                <td>${room.applied_count} / ${room.capacity}</td>
+                <td><button class="btn btn-sm btn-danger" onclick="deleteRoom(${room.id})">删除</button></td>
+            `;
+            tbody.appendChild(tr);
+        });
+    } catch (error) {
+        console.error('加载房间失败:', error);
+    }
+}
+
+async function addRoom() {
+    const interviewId = document.getElementById('roomInterviewId').value;
+    const name = document.getElementById('roomName').value.trim();
+    const capacity = parseInt(document.getElementById('roomCapacity').value) || 5;
+
+    if (!name) {
+        alert('请输入房间名称');
+        return;
+    }
+
+    try {
+        const response = await fetch(`/api/interviews/${interviewId}/rooms`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ name, capacity })
+        });
+        const data = await response.json();
+
+        if (data.success) {
+            document.getElementById('roomName').value = '';
+            loadRooms(interviewId);
+        } else {
+            alert(data.message || '添加失败');
+        }
+    } catch (error) {
+        alert('添加失败');
+    }
+}
+
+async function deleteRoom(roomId) {
+    if (!confirm('确定要删除此房间吗？')) return;
+
+    try {
+        const response = await fetch(`/api/rooms/${roomId}`, { method: 'DELETE' });
+        const data = await response.json();
+        if (data.success) {
+            const interviewId = document.getElementById('roomInterviewId').value;
+            loadRooms(interviewId);
+        }
+    } catch (error) {
+        alert('删除失败');
+    }
+}
+
+function closeRoomModal() {
+    document.getElementById('roomModal').classList.remove('show');
 }
 
 function showMessage(msg, type) {

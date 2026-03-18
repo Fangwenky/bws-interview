@@ -54,6 +54,17 @@ def init_db():
         )
     ''')
 
+    # 面试房间表
+    cursor.execute('''
+        CREATE TABLE IF NOT EXISTS rooms (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            interview_id INTEGER NOT NULL,
+            name TEXT NOT NULL,
+            capacity INTEGER DEFAULT 5,
+            FOREIGN KEY (interview_id) REFERENCES interviews(id) ON DELETE CASCADE
+        )
+    ''')
+
     # 时间段表
     cursor.execute('''
         CREATE TABLE IF NOT EXISTS time_slots (
@@ -66,16 +77,18 @@ def init_db():
         )
     ''')
 
-    # 面试官分配表（一个面试官可以负责多个场次或多个时间段）
+    # 面试官分配表（一个面试官可以负责多个场次或多个时间段或房间）
     cursor.execute('''
         CREATE TABLE IF NOT EXISTS interview_assignments (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             interview_id INTEGER NOT NULL,
             interviewer_id INTEGER NOT NULL,
             time_slot_id INTEGER,
+            room_id INTEGER,
             FOREIGN KEY (interview_id) REFERENCES interviews(id) ON DELETE CASCADE,
             FOREIGN KEY (interviewer_id) REFERENCES users(id) ON DELETE CASCADE,
-            FOREIGN KEY (time_slot_id) REFERENCES time_slots(id) ON DELETE CASCADE
+            FOREIGN KEY (time_slot_id) REFERENCES time_slots(id) ON DELETE CASCADE,
+            FOREIGN KEY (room_id) REFERENCES rooms(id) ON DELETE CASCADE
         )
     ''')
 
@@ -86,6 +99,7 @@ def init_db():
             student_id INTEGER NOT NULL,
             interview_id INTEGER NOT NULL,
             time_slot_id INTEGER NOT NULL,
+            room_id INTEGER,
             first_position TEXT,
             second_position TEXT,
             phone TEXT,
@@ -94,7 +108,8 @@ def init_db():
             created_at TEXT DEFAULT CURRENT_TIMESTAMP,
             FOREIGN KEY (student_id) REFERENCES users(id) ON DELETE CASCADE,
             FOREIGN KEY (interview_id) REFERENCES interviews(id) ON DELETE CASCADE,
-            FOREIGN KEY (time_slot_id) REFERENCES time_slots(id) ON DELETE CASCADE
+            FOREIGN KEY (time_slot_id) REFERENCES time_slots(id) ON DELETE CASCADE,
+            FOREIGN KEY (room_id) REFERENCES rooms(id) ON DELETE SET NULL
         )
     ''')
 
@@ -304,6 +319,14 @@ def admin_interviewers():
     return render_template('admin/interviewers.html')
 
 
+@app.route('/admin/users')
+@login_required
+@role_required('admin')
+def admin_users():
+    """用户管理"""
+    return render_template('admin/users.html')
+
+
 @app.route('/admin/results')
 @login_required
 @role_required('admin')
@@ -478,6 +501,69 @@ def delete_time_slot(slot_id):
 
 
 # ============================================================
+# API：面试房间管理
+# ============================================================
+
+@app.route('/api/interviews/<int:interview_id>/rooms', methods=['GET'])
+@login_required
+def get_rooms(interview_id):
+    """获取面试场次的房间列表"""
+    conn = get_db_connection()
+    cursor = conn.cursor()
+    cursor.execute('''
+        SELECT r.*,
+               (SELECT COUNT(*) FROM applications a
+                WHERE a.room_id = r.id AND a.status = 'pending') as applied_count
+        FROM rooms r
+        WHERE r.interview_id = ?
+        ORDER BY r.name
+    ''', (interview_id,))
+    rooms = cursor.fetchall()
+    conn.close()
+    return jsonify([dict(r) for r in rooms])
+
+
+@app.route('/api/interviews/<int:interview_id>/rooms', methods=['POST'])
+@login_required
+@role_required('admin')
+def create_room(interview_id):
+    """添加面试房间"""
+    data = request.get_json()
+    name = data.get('name', '').strip()
+    capacity = data.get('capacity', 5)
+
+    if not name:
+        return jsonify({'success': False, 'message': '请输入房间名称'})
+
+    conn = get_db_connection()
+    cursor = conn.cursor()
+    cursor.execute(
+        "INSERT INTO rooms (interview_id, name, capacity) VALUES (?, ?, ?)",
+        (interview_id, name, capacity)
+    )
+    conn.commit()
+    conn.close()
+
+    return jsonify({'success': True})
+
+
+@app.route('/api/rooms/<int:room_id>', methods=['DELETE'])
+@login_required
+@role_required('admin')
+def delete_room(room_id):
+    """删除面试房间"""
+    conn = get_db_connection()
+    cursor = conn.cursor()
+    # 将该房间的报名记录的房间ID设为NULL
+    cursor.execute("UPDATE applications SET room_id = NULL WHERE room_id = ?", (room_id,))
+    cursor.execute("DELETE FROM rooms WHERE id = ?", (room_id,))
+    conn.commit()
+    conn.close()
+
+    return jsonify({'success': True})
+
+
+# ============================================================
 # API：面试官分配
 # ============================================================
 
@@ -488,10 +574,11 @@ def get_assignments(interview_id):
     conn = get_db_connection()
     cursor = conn.cursor()
     cursor.execute('''
-        SELECT ia.*, u.name as interviewer_name, ts.start_time, ts.end_time
+        SELECT ia.*, u.name as interviewer_name, ts.start_time, ts.end_time, r.name as room_name
         FROM interview_assignments ia
         JOIN users u ON ia.interviewer_id = u.id
         LEFT JOIN time_slots ts ON ia.time_slot_id = ts.id
+        LEFT JOIN rooms r ON ia.room_id = r.id
         WHERE ia.interview_id = ?
     ''', (interview_id,))
     assignments = cursor.fetchall()
@@ -508,6 +595,7 @@ def create_assignment(interview_id):
     data = request.get_json()
     interviewer_id = data.get('interviewer_id')
     time_slot_id = data.get('time_slot_id')
+    room_id = data.get('room_id')
 
     if not interviewer_id:
         return jsonify({'success': False, 'message': '请选择面试官'})
@@ -515,8 +603,8 @@ def create_assignment(interview_id):
     conn = get_db_connection()
     cursor = conn.cursor()
     cursor.execute(
-        "INSERT INTO interview_assignments (interview_id, interviewer_id, time_slot_id) VALUES (?, ?, ?)",
-        (interview_id, interviewer_id, time_slot_id)
+        "INSERT INTO interview_assignments (interview_id, interviewer_id, time_slot_id, room_id) VALUES (?, ?, ?, ?)",
+        (interview_id, interviewer_id, time_slot_id, room_id)
     )
     conn.commit()
     conn.close()
@@ -556,34 +644,44 @@ def get_applications():
         # 管理员查看所有报名
         cursor.execute('''
             SELECT a.*, u.name as student_name, u.username as student_number,
-                   i.title as interview_title, ts.start_time, ts.end_time
+                   i.title as interview_title, ts.start_time, ts.end_time,
+                   r.name as room_name
             FROM applications a
             JOIN users u ON a.student_id = u.id
             JOIN interviews i ON a.interview_id = i.id
             JOIN time_slots ts ON a.time_slot_id = ts.id
+            LEFT JOIN rooms r ON a.room_id = r.id
             ORDER BY a.created_at DESC
         ''')
     elif role == 'interviewer':
-        # 面试官查看自己负责的报名
+        # 面试官查看自己负责的报名（按房间筛选）
         cursor.execute('''
             SELECT a.*, u.name as student_name, u.username as student_number,
-                   i.title as interview_title, ts.start_time, ts.end_time
+                   i.title as interview_title, ts.start_time, ts.end_time,
+                   r.name as room_name
             FROM applications a
             JOIN users u ON a.student_id = u.id
             JOIN interviews i ON a.interview_id = i.id
             JOIN time_slots ts ON a.time_slot_id = ts.id
+            LEFT JOIN rooms r ON a.room_id = r.id
             WHERE a.interview_id IN (
                 SELECT interview_id FROM interview_assignments WHERE interviewer_id = ?
             )
+            AND (a.room_id IN (
+                SELECT room_id FROM interview_assignments
+                WHERE interviewer_id = ? AND room_id IS NOT NULL
+            ) OR a.room_id IS NULL)
             ORDER BY ts.start_time, a.created_at
-        ''', (user_id,))
+        ''', (user_id, user_id,))
     else:
         # 学生查看自己的报名
         cursor.execute('''
-            SELECT a.*, i.title as interview_title, ts.start_time, ts.end_time
+            SELECT a.*, i.title as interview_title, ts.start_time, ts.end_time,
+                   r.name as room_name
             FROM applications a
             JOIN interviews i ON a.interview_id = i.id
             JOIN time_slots ts ON a.time_slot_id = ts.id
+            LEFT JOIN rooms r ON a.room_id = r.id
             WHERE a.student_id = ?
             ORDER BY a.created_at DESC
         ''', (user_id,))
@@ -808,6 +906,93 @@ def create_interviewer():
 
 
 # ============================================================
+# API：用户管理（管理员）
+# ============================================================
+
+@app.route('/api/users', methods=['GET'])
+@login_required
+@role_required('admin')
+def get_all_users():
+    """获取所有用户"""
+    conn = get_db_connection()
+    cursor = conn.cursor()
+    cursor.execute("SELECT id, username, name, role, created_at FROM users ORDER BY created_at DESC")
+    users = cursor.fetchall()
+    conn.close()
+    return jsonify([dict(u) for u in users])
+
+
+@app.route('/api/users', methods=['POST'])
+@login_required
+@role_required('admin')
+def create_user():
+    """创建用户（管理员）"""
+    data = request.get_json()
+    role = data.get('role')
+    username = data.get('username', '').strip()
+    password = data.get('password', '').strip()
+    name = data.get('name', '').strip()
+
+    if not role or not username or not password or not name:
+        return jsonify({'success': False, 'message': '请填写完整信息'})
+
+    if role not in ['admin', 'interviewer', 'student']:
+        return jsonify({'success': False, 'message': '角色无效'})
+
+    # 学生需要验证学号格式
+    if role == 'student' and not username.isdigit():
+        return jsonify({'success': False, 'message': '学号必须是纯数字'})
+
+    conn = get_db_connection()
+    cursor = conn.cursor()
+
+    # 检查用户名是否存在
+    cursor.execute("SELECT * FROM users WHERE username = ?", (username,))
+    if cursor.fetchone():
+        conn.close()
+        return jsonify({'success': False, 'message': '用户名/学号已存在'})
+
+    cursor.execute(
+        "INSERT INTO users (username, password, name, role) VALUES (?, ?, ?, ?)",
+        (username, password, name, role)
+    )
+    conn.commit()
+    conn.close()
+
+    return jsonify({'success': True, 'message': '用户创建成功'})
+
+
+@app.route('/api/users/<int:user_id>', methods=['DELETE'])
+@login_required
+@role_required('admin')
+def delete_user(user_id):
+    """删除用户"""
+    conn = get_db_connection()
+    cursor = conn.cursor()
+
+    # 获取要删除的用户
+    cursor.execute("SELECT role FROM users WHERE id = ?", (user_id,))
+    user = cursor.fetchone()
+    if not user:
+        conn.close()
+        return jsonify({'success': False, 'message': '用户不存在'})
+
+    # 检查是否最后一个管理员
+    if user['role'] == 'admin':
+        cursor.execute("SELECT COUNT(*) FROM users WHERE role = 'admin'")
+        admin_count = cursor.fetchone()[0]
+        if admin_count <= 1:
+            conn.close()
+            return jsonify({'success': False, 'message': '不能删除最后一个管理员'})
+
+    cursor.execute("DELETE FROM users WHERE id = ?", (user_id,))
+    conn.commit()
+    conn.close()
+
+    return jsonify({'success': True})
+
+
+# ============================================================
 # API：数据统计
 # ============================================================
 
@@ -942,6 +1127,21 @@ def interviewer_dashboard():
 def student_dashboard():
     """面试者仪表盘"""
     return render_template('student/dashboard.html')
+
+
+# ============================================================
+# 调试接口：检查用户账号
+# ============================================================
+
+@app.route('/api/debug/users')
+def debug_users():
+    """调试用：查看所有用户"""
+    conn = get_db_connection()
+    cursor = conn.cursor()
+    cursor.execute("SELECT id, username, name, role FROM users")
+    users = cursor.fetchall()
+    conn.close()
+    return jsonify([dict(u) for u in users])
 
 
 # ============================================================

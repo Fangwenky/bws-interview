@@ -10,6 +10,7 @@
             <li><a href="/admin">仪表盘</a></li>
             <li><a href="/admin/interviews">面试场次管理</a></li>
             <li><a href="/admin/interviewers" class="active">面试官管理</a></li>
+            <li><a href="/admin/users">用户管理</a></li>
             <li><a href="/admin/results">面试结果查看</a></li>
             <li><a href="/logout">退出登录</a></li>
         </ul>
@@ -74,6 +75,11 @@
                         <option value="">全部时间段</option>
                     </select>
                 </div>
+                <div class="form-group" style="flex: 1; min-width: 150px;">
+                    <select id="assignRoom">
+                        <option value="">全部房间</option>
+                    </select>
+                </div>
                 <div class="form-group">
                     <button type="submit" class="btn btn-success">分配</button>
                 </div>
@@ -86,6 +92,7 @@
                         <th>面试场次</th>
                         <th>面试官</th>
                         <th>时间段</th>
+                        <th>房间</th>
                         <th>操作</th>
                     </tr>
                 </thead>
@@ -162,7 +169,7 @@ async function loadAssignments() {
         tbody.innerHTML = '';
 
         if (interviews.length === 0) {
-            tbody.innerHTML = '<tr><td colspan="4" style="text-align:center;">暂无数据</td></tr>';
+            tbody.innerHTML = '<tr><td colspan="5" style="text-align:center;">暂无数据</td></tr>';
             return;
         }
 
@@ -176,6 +183,7 @@ async function loadAssignments() {
                     <td>${interview.title}</td>
                     <td>${a.interviewer_name}</td>
                     <td>${a.start_time ? `${a.start_time} - ${a.end_time}` : '全部时间段'}</td>
+                    <td>${a.room_name || '-'}</td>
                     <td><button class="btn btn-sm btn-danger" onclick="deleteAssignment(${a.id})">取消分配</button></td>
                 `;
                 tbody.appendChild(tr);
@@ -183,7 +191,7 @@ async function loadAssignments() {
         }
 
         if (tbody.children.length === 0) {
-            tbody.innerHTML = '<tr><td colspan="4" style="text-align:center;">暂无分配</td></tr>';
+            tbody.innerHTML = '<tr><td colspan="5" style="text-align:center;">暂无分配</td></tr>';
         }
     } catch (error) {
         console.error('加载失败:', error);
@@ -199,6 +207,21 @@ async function loadTimeSlotsForSelect(interviewId) {
         select.innerHTML = '<option value="">全部时间段</option>';
         slots.forEach(s => {
             select.innerHTML += `<option value="${s.id}">${s.start_time} - ${s.end_time}</option>`;
+        });
+    } catch (error) {
+        console.error('加载失败:', error);
+    }
+}
+
+async function loadRoomsForSelect(interviewId) {
+    try {
+        const response = await fetch(`/api/interviews/${interviewId}/rooms`);
+        const rooms = await response.json();
+
+        const select = document.getElementById('assignRoom');
+        select.innerHTML = '<option value="">全部房间</option>';
+        rooms.forEach(r => {
+            select.innerHTML += `<option value="${r.id}">${r.name}</option>`;
         });
     } catch (error) {
         console.error('加载失败:', error);
@@ -236,8 +259,10 @@ document.getElementById('assignInterview').addEventListener('change', function()
     const interviewId = this.value;
     if (interviewId) {
         loadTimeSlotsForSelect(interviewId);
+        loadRoomsForSelect(interviewId);
     } else {
         document.getElementById('assignTimeSlot').innerHTML = '<option value="">全部时间段</option>';
+        document.getElementById('assignRoom').innerHTML = '<option value="">全部房间</option>';
     }
 });
 
@@ -246,10 +271,18 @@ document.getElementById('assignForm').addEventListener('submit', async function(
     const interviewId = document.getElementById('assignInterview').value;
     const interviewerId = document.getElementById('assignInterviewer').value;
     const timeSlotId = document.getElementById('assignTimeSlot').value;
+    const roomId = document.getElementById('assignRoom').value;
 
     try {
         const response = await fetch(`/api/interviews/${interviewId}/assignments`, {
             method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                interviewer_id: parseInt(interviewerId),
+                time_slot_id: timeSlotId ? parseInt(timeSlotId) : null,
+                room_id: roomId ? parseInt(roomId) : null
+            })
+        });
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
                 interviewer_id: parseInt(interviewerId),

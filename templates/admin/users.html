@@ -1,0 +1,189 @@
+{% extends "base.html" %}
+
+{% block title %}用户管理 - 博物社面试管理系统{% endblock %}
+
+{% block content %}
+<div class="admin-layout">
+    <div class="sidebar">
+        <h2>管理后台</h2>
+        <ul>
+            <li><a href="/admin">仪表盘</a></li>
+            <li><a href="/admin/interviews">面试场次管理</a></li>
+            <li><a href="/admin/interviewers">面试官管理</a></li>
+            <li><a href="/admin/users" class="active">用户管理</a></li>
+            <li><a href="/admin/results">面试结果查看</a></li>
+            <li><a href="/logout">退出登录</a></li>
+        </ul>
+        <div class="user-info">
+            <p>欢迎，{{ session.name }}</p>
+        </div>
+    </div>
+    <div class="main-content">
+        <h1 class="page-title">用户管理</h1>
+
+        <!-- 添加用户 -->
+        <div class="card">
+            <h3>添加用户</h3>
+            <form id="addUserForm" class="form-row" style="flex-wrap: wrap;">
+                <div class="form-group" style="flex: 1; min-width: 120px;">
+                    <select id="userRole" required>
+                        <option value="">选择角色</option>
+                        <option value="admin">管理员</option>
+                        <option value="interviewer">面试官</option>
+                        <option value="student">学生</option>
+                    </select>
+                </div>
+                <div class="form-group" style="flex: 1; min-width: 120px;">
+                    <input type="text" id="userName" placeholder="姓名" required>
+                </div>
+                <div class="form-group" style="flex: 1; min-width: 150px;">
+                    <input type="text" id="userUsername" placeholder="用户名/学号" required>
+                </div>
+                <div class="form-group" style="flex: 1; min-width: 150px;">
+                    <input type="password" id="userPassword" placeholder="密码" required>
+                </div>
+                <div class="form-group">
+                    <button type="submit" class="btn btn-primary">添加</button>
+                </div>
+            </form>
+            <div id="message"></div>
+        </div>
+
+        <!-- 用户列表 -->
+        <div class="card">
+            <h3>用户列表</h3>
+            <div class="filter-bar">
+                <select id="filterRole" onchange="loadUsers()">
+                    <option value="">全部角色</option>
+                    <option value="admin">管理员</option>
+                    <option value="interviewer">面试官</option>
+                    <option value="student">学生</option>
+                </select>
+                <input type="text" id="searchKeyword" placeholder="搜索姓名或用户名" oninput="loadUsers()">
+            </div>
+            <table id="userTable">
+                <thead>
+                    <tr>
+                        <th>姓名</th>
+                        <th>用户名/学号</th>
+                        <th>角色</th>
+                        <th>操作</th>
+                    </tr>
+                </thead>
+                <tbody></tbody>
+            </table>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+async function loadUsers() {
+    try {
+        const role = document.getElementById('filterRole').value;
+        const keyword = document.getElementById('searchKeyword').value.toLowerCase();
+
+        const response = await fetch('/api/users');
+        let users = await response.json();
+
+        // 过滤
+        if (role) {
+            users = users.filter(u => u.role === role);
+        }
+        if (keyword) {
+            users = users.filter(u => u.name.toLowerCase().includes(keyword) || u.username.includes(keyword));
+        }
+
+        const tbody = document.querySelector('#userTable tbody');
+        tbody.innerHTML = '';
+
+        if (users.length === 0) {
+            tbody.innerHTML = '<tr><td colspan="4" style="text-align:center;">暂无用户</td></tr>';
+            return;
+        }
+
+        const roleNames = {
+            'admin': '管理员',
+            'interviewer': '面试官',
+            'student': '学生'
+        };
+
+        users.forEach(user => {
+            const tr = document.createElement('tr');
+            tr.innerHTML = `
+                <td>${user.name}</td>
+                <td>${user.username}</td>
+                <td><span class="badge badge-${user.role === 'admin' ? 'danger' : user.role === 'interviewer' ? 'warning' : 'info'}">${roleNames[user.role]}</span></td>
+                <td>
+                    ${user.role !== 'admin' || users.filter(u => u.role === 'admin').length > 1
+                        ? `<button class="btn btn-sm btn-danger" onclick="deleteUser(${user.id})">删除</button>`
+                        : '<span style="color:#999;">-</span>'}
+                </td>
+            `;
+            tbody.appendChild(tr);
+        });
+    } catch (error) {
+        console.error('加载失败:', error);
+    }
+}
+
+document.getElementById('addUserForm').addEventListener('submit', async function(e) {
+    e.preventDefault();
+    const role = document.getElementById('userRole').value;
+    const name = document.getElementById('userName').value.trim();
+    const username = document.getElementById('userUsername').value.trim();
+    const password = document.getElementById('userPassword').value;
+
+    if (!role || !name || !username || !password) {
+        showMessage('请填写完整信息', 'error');
+        return;
+    }
+
+    try {
+        const response = await fetch('/api/users', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ role, name, username, password })
+        });
+        const data = await response.json();
+
+        if (data.success) {
+            showMessage('添加成功', 'success');
+            document.getElementById('addUserForm').reset();
+            loadUsers();
+        } else {
+            showMessage(data.message || '添加失败', 'error');
+        }
+    } catch (error) {
+        showMessage('添加失败', 'error');
+    }
+});
+
+async function deleteUser(userId) {
+    if (!confirm('确定要删除此用户吗？')) return;
+
+    try {
+        const response = await fetch(`/api/users/${userId}`, { method: 'DELETE' });
+        const data = await response.json();
+        if (data.success) {
+            showMessage('删除成功', 'success');
+            loadUsers();
+        } else {
+            showMessage(data.message || '删除失败', 'error');
+        }
+    } catch (error) {
+        showMessage('删除失败', 'error');
+    }
+}
+
+function showMessage(msg, type) {
+    const div = document.getElementById('message');
+    div.className = `message ${type}`;
+    div.textContent = msg;
+    setTimeout(() => { div.textContent = ''; }, 3000);
+}
+
+loadUsers();
+</script>
+{% endblock %}
