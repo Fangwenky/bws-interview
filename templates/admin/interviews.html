@@ -321,7 +321,6 @@ async function addTimeSlot() {
                     body: JSON.stringify({ room_id: rooms[i].id, start_time: startTime, end_time: endTime })
                 });
             }
-            alert('已为所有房间添加时间段');
         } else {
             const response = await fetch(`/api/interviews/${interviewId}/time-slots`, {
                 method: 'POST',

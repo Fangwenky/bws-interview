@@ -102,12 +102,15 @@ let allInterviews = [];
 async function loadInterviews() {
     try {
         var response = await fetch('/api/interviews');
+        if (!response.ok) {
+            throw new Error('Network response was not ok');
+        }
         var interviews = await response.json();
         allInterviews = interviews;
 
         var container = document.getElementById('interviewList');
 
-        if (interviews.length === 0) {
+        if (!interviews || interviews.length === 0) {
             container.innerHTML = '<div class="empty-state"><h3>暂无可报名的面试场次</h3><p>请留意社团通知，了解最新的招新安排。</p></div>';
             return;
         }
@@ -116,18 +119,35 @@ async function loadInterviews() {
         var appsResp = await fetch('/api/applications');
         var myApps = await appsResp.json();
         var hasApplied = false;
-        for (var i = 0; i < myApps.length; i++) {
-            if (myApps[i].status === 'pending') {
-                hasApplied = true;
-                break;
+        if (myApps && myApps.length > 0) {
+            for (var i = 0; i < myApps.length; i++) {
+                if (myApps[i].status === 'pending') {
+                    hasApplied = true;
+                    break;
+                }
             }
         }
 
         var html = '';
         for (var i = 0; i < interviews.length; i++) {
             var interview = interviews[i];
-            var positions = interview.positions ? interview.positions.join('、') : '未设置职位';
-            var btnHtml = hasApplied ? '<span class="badge badge-warning">您已报名</span>' : '<button class="btn btn-sm btn-primary" onclick="showApplyModal(' + interview.id + ', \'' + interview.title + '\', \'' + (interview.location || '') + '\', \'' + (interview.positions ? interview.positions.join(',') : '') + '\')">立即报名</button>';
+            var positions = '未设置职位';
+            var positionsStr = '';
+            try {
+                if (interview.positions) {
+                    if (Array.isArray(interview.positions)) {
+                        positions = interview.positions.join('、');
+                        positionsStr = interview.positions.join(',');
+                    } else {
+                        positions = interview.positions;
+                        positionsStr = interview.positions;
+                    }
+                }
+            } catch(e) {
+                positions = '未设置职位';
+                positionsStr = '';
+            }
+            var btnHtml = hasApplied ? '<span class="badge badge-warning">您已报名</span>' : '<button class="btn btn-sm btn-primary" onclick="showApplyModal(' + interview.id + ', \'' + interview.title + '\', \'' + (interview.location || '') + '\', \'' + positionsStr + '\')">立即报名</button>';
 
             html += '<div class="card">';
             html += '<div class="application-header">';
@@ -146,6 +166,7 @@ async function loadInterviews() {
         container.innerHTML = html;
     } catch (error) {
         console.error('加载失败:', error);
+        document.getElementById('interviewList').innerHTML = '<p style="color:red;">加载失败，请刷新页面</p>';
     }
 }
 
