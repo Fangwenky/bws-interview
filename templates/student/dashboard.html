@@ -208,15 +208,17 @@ async function loadTimeSlots(interviewId) {
         }
 
         for (var i = 0; i < slots.length; i++) {
-            var slot = slots[i];
-            var isFull = slot.is_full;
-            var div = document.createElement('div');
-            div.className = 'time-slot-item ' + (isFull ? 'full' : '');
-            div.innerHTML = '<div class="time">' + (slot.room_name || '房间') + '</div><div class="time">' + slot.start_time + ' - ' + slot.end_time + '</div><div class="count">' + (isFull ? '已满' : '可报名') + '</div>';
-            if (!isFull) {
-                div.onclick = function() { selectTimeSlot(slot.id, div); };
-            }
-            grid.appendChild(div);
+            (function() {
+                var slot = slots[i];
+                var isFull = slot.is_full;
+                var div = document.createElement('div');
+                div.className = 'time-slot-item ' + (isFull ? 'full' : '');
+                div.innerHTML = '<div class="time">' + (slot.room_name || '房间') + '</div><div class="time">' + slot.start_time + ' - ' + slot.end_time + '</div><div class="count">' + (isFull ? '已满' : '可报名') + '</div>';
+                if (!isFull) {
+                    div.onclick = function() { selectTimeSlot(slot.id, div); };
+                }
+                grid.appendChild(div);
+            })();
         }
     } catch (error) {
         console.error('加载时间段失败:', error);
