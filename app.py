@@ -747,20 +747,14 @@ def create_application():
         conn.close()
         return jsonify({'success': False, 'message': '您已报名其他面试场次，每人只能报名一个场次'})
 
-    # 检查时间段是否已满
+    # 检查时间段是否已满（每个时间段最多1人）
     cursor.execute(
         "SELECT COUNT(*) FROM applications WHERE time_slot_id = ? AND status = 'pending'",
         (time_slot_id,)
     )
     applied_count = cursor.fetchone()[0]
 
-    cursor.execute("SELECT max_count FROM time_slots WHERE id = ?", (time_slot_id,))
-    slot = cursor.fetchone()
-    if not slot:
-        conn.close()
-        return jsonify({'success': False, 'message': '时间段不存在'})
-
-    if applied_count >= slot['max_count']:
+    if applied_count >= 1:
         conn.close()
         return jsonify({'success': False, 'message': '该时间段已满，请选择其他时间段'})
 
