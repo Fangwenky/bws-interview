@@ -1142,6 +1142,14 @@ def student_dashboard():
     return render_template('student/dashboard.html')
 
 
+@app.route('/student/applications')
+@login_required
+@role_required('student')
+def student_applications():
+    """我的报名"""
+    return render_template('student/applications.html')
+
+
 # ============================================================
 # 调试接口：检查用户账号
 # ============================================================

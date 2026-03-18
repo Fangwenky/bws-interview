@@ -1,0 +1,125 @@
+{% extends "base.html" %}
+
+{% block title %}我的报名 - 博物社面试管理系统{% endblock %}
+
+{% block content %}
+<div class="student-layout">
+    <div class="sidebar">
+        <h2>面试报名</h2>
+        <ul>
+            <li><a href="/student">可报名的场次</a></li>
+            <li><a href="/student/applications" class="active">我的报名</a></li>
+            <li><a href="/logout">退出登录</a></li>
+        </ul>
+        <div class="user-info">
+            <p>欢迎，{{ session.name }}</p>
+            <p>学号：{{ session.username }}</p>
+        </div>
+    </div>
+    <div class="main-content">
+        <h1 class="page-title">我的报名</h1>
+
+        <div id="applicationList"></div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+async function loadMyApplications() {
+    try {
+        const response = await fetch('/api/applications');
+        const applications = await response.json();
+
+        const container = document.getElementById('applicationList');
+
+        if (applications.length === 0) {
+            container.innerHTML = '<div class="empty-state"><h3>暂无报名记录</h3><p>你还没有报名任何面试场次</p><a href="/student" class="btn btn-primary">去报名</a></div>';
+            return;
+        }
+
+        var html = '';
+        for (var i = 0; i < applications.length; i++) {
+            var app = applications[i];
+
+            // 获取面试结果
+            var resultResp = await fetch('/api/applications/' + app.id + '/result');
+            var results = await resultResp.json();
+
+            var statusHtml = '';
+            var statusClass = '';
+            var statusText = '';
+
+            if (app.status === 'cancelled') {
+                statusHtml = '<span class="badge badge-danger">已取消</span>';
+            } else if (results.length > 0) {
+                var r = results[0];
+                if (r.result === 'pass') {
+                    statusHtml = '<span class="badge badge-success">已被录取</span>';
+                } else if (r.result === 'fail') {
+                    statusHtml = '<span class="badge badge-danger">遗憾未通过</span>';
+                } else {
+                    statusHtml = '<span class="badge badge-warning">等待结果</span>';
+                }
+            } else {
+                statusHtml = '<span class="badge badge-info">待面试</span>';
+            }
+
+            var cancelBtn = app.status === 'pending' ? '<button class="btn btn-sm btn-danger" onclick="cancelApplication(' + app.id + ')">取消报名</button>' : '';
+
+            html += '<div class="card">';
+            html += '<div class="application-header">';
+            html += '<span class="application-title">' + app.interview_title + '</span>';
+            html += statusHtml;
+            html += '</div>';
+            html += '<p><strong>面试地点：</strong>' + (app.room_name || '待分配') + '</p>';
+            html += '<p><strong>时间段：</strong>' + app.start_time + ' - ' + app.end_time + '</p>';
+            html += '<p><strong>第一志愿：</strong>' + app.first_position + '</p>';
+            if (app.second_position) {
+                html += '<p><strong>第二志愿：</strong>' + app.second_position + '</p>';
+            }
+            html += '<p><strong>联系电话：</strong>' + (app.phone || '-') + '</p>';
+            html += '<p><strong>报名时间：</strong>' + app.created_at + '</p>';
+
+            // 如果有面试结果，显示详情
+            if (results.length > 0) {
+                var r = results[0];
+                html += '<hr style="margin:15px 0;border:none;border-top:1px solid #eee;">';
+                html += '<p><strong>面试结果：</strong>' + (r.result === 'pass' ? '通过' : r.result === 'fail' ? '未通过' : '待定') + '</p>';
+                if (r.comment) {
+                    html += '<p><strong>面试评语：</strong>' + r.comment + '</p>';
+                }
+            }
+
+            html += '<div style="margin-top:15px;">' + cancelBtn + '</div>';
+            html += '</div>';
+        }
+
+        container.innerHTML = html;
+    } catch (error) {
+        console.error('加载失败:', error);
+        document.getElementById('applicationList').innerHTML = '<p style="color:red;">加载失败</p>';
+    }
+}
+
+async function cancelApplication(appId) {
+    if (!confirm('确定要取消报名吗？')) return;
+
+    try {
+        const response = await fetch('/api/applications/' + appId, { method: 'DELETE' });
+        const data = await response.json();
+
+        if (data.success) {
+            alert('取消报名成功');
+            loadMyApplications();
+        } else {
+            alert(data.message || '取消失败');
+        }
+    } catch (error) {
+        alert('取消失败');
+    }
+}
+
+loadMyApplications();
+</script>
+{% endblock %}
