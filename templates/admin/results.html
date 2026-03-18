@@ -1,0 +1,175 @@
+{% extends "base.html" %}
+
+{% block title %}面试结果查看 - 博物社面试管理系统{% endblock %}
+
+{% block content %}
+<div class="admin-layout">
+    <div class="sidebar">
+        <h2>管理后台</h2>
+        <ul>
+            <li><a href="/admin">仪表盘</a></li>
+            <li><a href="/admin/interviews">面试场次管理</a></li>
+            <li><a href="/admin/interviewers">面试官管理</a></li>
+            <li><a href="/admin/results" class="active">面试结果查看</a></li>
+            <li><a href="/logout">退出登录</a></li>
+        </ul>
+        <div class="user-info">
+            <p>欢迎，{{ session.name }}</p>
+        </div>
+    </div>
+    <div class="main-content">
+        <h1 class="page-title">面试结果查看</h1>
+
+        <div class="action-buttons" style="margin-bottom: 20px;">
+            <a href="/api/export" class="btn btn-success" download>导出数据为Excel</a>
+        </div>
+
+        <table id="resultTable">
+            <thead>
+                <tr>
+                    <th>姓名</th>
+                    <th>学号</th>
+                    <th>面试场次</th>
+                    <th>时间段</th>
+                    <th>第一志愿</th>
+                    <th>第二志愿</th>
+                    <th>报名状态</th>
+                    <th>面试结果</th>
+                    <th>操作</th>
+                </tr>
+            </thead>
+            <tbody></tbody>
+        </table>
+    </div>
+</div>
+
+<!-- 查看详情弹窗 -->
+<div class="modal" id="detailModal">
+    <div class="modal-content">
+        <div class="modal-header">
+            <h3>报名详情</h3>
+            <button class="modal-close" onclick="closeDetailModal()">&times;</button>
+        </div>
+        <div id="detailContent"></div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+async function loadResults() {
+    try {
+        const response = await fetch('/api/applications');
+        const applications = await response.json();
+
+        const tbody = document.querySelector('#resultTable tbody');
+        tbody.innerHTML = '';
+
+        if (applications.length === 0) {
+            tbody.innerHTML = '<tr><td colspan="9" style="text-align:center;">暂无数据</td></tr>';
+            return;
+        }
+
+        for (const app of applications) {
+            // 获取面试结果
+            const resultResp = await fetch(`/api/applications/${app.id}/result`);
+            const results = await resultResp.json();
+
+            let resultText = '-';
+            let attendanceText = '-';
+
+            if (results.length > 0) {
+                const r = results[0];
+                if (r.result === 'pass') resultText = '<span class="badge badge-success">通过</span>';
+                else if (r.result === 'fail') resultText = '<span class="badge badge-danger">未通过</span>';
+                else resultText = '<span class="badge badge-warning">待定</span>';
+
+                if (r.attendance === 'present') attendanceText = '<span class="badge badge-success">已到场</span>';
+                else if (r.attendance === 'absent') attendanceText = '<span class="badge badge-danger">未到场</span>';
+            }
+
+            let statusText = '-';
+            if (app.status === 'pending') statusText = '<span class="badge badge-info">已报名</span>';
+            else if (app.status === 'cancelled') statusText = '<span class="badge badge-danger">已取消</span>';
+
+            const tr = document.createElement('tr');
+            tr.innerHTML = `
+                <td>${app.student_name}</td>
+                <td>${app.student_number}</td>
+                <td>${app.interview_title}</td>
+                <td>${app.start_time} - ${app.end_time}</td>
+                <td>${app.first_position || '-'}</td>
+                <td>${app.second_position || '-'}</td>
+                <td>${statusText}</td>
+                <td>${resultText}</td>
+                <td>
+                    <button class="btn btn-sm btn-secondary" onclick="showDetail(${app.id})">查看详情</button>
+                </td>
+            `;
+            tbody.appendChild(tr);
+        }
+    } catch (error) {
+        console.error('加载失败:', error);
+    }
+}
+
+async function showDetail(appId) {
+    try {
+        // 获取报名信息
+        const appsResp = await fetch('/api/applications');
+        const applications = await appsResp.json();
+        const app = applications.find(a => a.id === appId);
+
+        if (!app) return;
+
+        // 获取面试结果
+        const resultResp = await fetch(`/api/applications/${appId}/result`);
+        const results = await resultResp.json();
+
+        let html = `
+            <div class="card">
+                <p><strong>姓名：</strong>${app.student_name}</p>
+                <p><strong>学号：</strong>${app.student_number}</p>
+                <p><strong>联系电话：</strong>${app.phone || '-'}</p>
+                <p><strong>面试场次：</strong>${app.interview_title}</p>
+                <p><strong>时间段：</strong>${app.start_time} - ${app.end_time}</p>
+                <p><strong>第一志愿：</strong>${app.first_position}</p>
+                <p><strong>第二志愿：</strong>${app.second_position || '-'}</p>
+                <p><strong>接受调剂：</strong>${app.accept_adjust ? '是' : '否'}</p>
+                <p><strong>报名状态：</strong>${app.status === 'pending' ? '已报名' : '已取消'}</p>
+            </div>
+        `;
+
+        if (results.length > 0) {
+            const r = results[0];
+            html += `
+                <div class="card">
+                    <h4>面试结果</h4>
+                    <p><strong>到场状态：</strong>${r.attendance === 'present' ? '已到场' : '未到场'}</p>
+                    <p><strong>面试结果：</strong>${r.result === 'pass' ? '通过' : r.result === 'fail' ? '未通过' : '待定'}</p>
+                    <p><strong>面试评语：</strong>${r.comment || '-'}</p>
+                    <p><strong>评分人：</strong>${r.interviewer_name}</p>
+                </div>
+            `;
+        } else {
+            html += `
+                <div class="card">
+                    <p style="color:#999;">暂无面试结果</p>
+                </div>
+            `;
+        }
+
+        document.getElementById('detailContent').innerHTML = html;
+        document.getElementById('detailModal').classList.add('show');
+    } catch (error) {
+        console.error('加载详情失败:', error);
+    }
+}
+
+function closeDetailModal() {
+    document.getElementById('detailModal').classList.remove('show');
+}
+
+loadResults();
+</script>
+{% endblock %}

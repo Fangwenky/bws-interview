@@ -1,0 +1,299 @@
+{% extends "base.html" %}
+
+{% block title %}面试官管理 - 博物社面试管理系统{% endblock %}
+
+{% block content %}
+<div class="admin-layout">
+    <div class="sidebar">
+        <h2>管理后台</h2>
+        <ul>
+            <li><a href="/admin">仪表盘</a></li>
+            <li><a href="/admin/interviews">面试场次管理</a></li>
+            <li><a href="/admin/interviewers" class="active">面试官管理</a></li>
+            <li><a href="/admin/results">面试结果查看</a></li>
+            <li><a href="/logout">退出登录</a></li>
+        </ul>
+        <div class="user-info">
+            <p>欢迎，{{ session.name }}</p>
+        </div>
+    </div>
+    <div class="main-content">
+        <h1 class="page-title">面试官管理</h1>
+
+        <!-- 添加面试官 -->
+        <div class="card">
+            <h3>添加面试官</h3>
+            <form id="addInterviewerForm" class="form-row" style="flex-wrap: wrap;">
+                <div class="form-group" style="flex: 1; min-width: 150px;">
+                    <input type="text" id="interviewerName" placeholder="姓名" required>
+                </div>
+                <div class="form-group" style="flex: 1; min-width: 150px;">
+                    <input type="text" id="interviewerUsername" placeholder="用户名" required>
+                </div>
+                <div class="form-group" style="flex: 1; min-width: 150px;">
+                    <input type="password" id="interviewerPassword" placeholder="密码" required>
+                </div>
+                <div class="form-group">
+                    <button type="submit" class="btn btn-primary">添加</button>
+                </div>
+            </form>
+            <div id="message"></div>
+        </div>
+
+        <!-- 面试官列表 -->
+        <div class="card">
+            <h3>面试官列表</h3>
+            <table id="interviewerTable">
+                <thead>
+                    <tr>
+                        <th>姓名</th>
+                        <th>用户名</th>
+                        <th>操作</th>
+                    </tr>
+                </thead>
+                <tbody></tbody>
+            </table>
+        </div>
+
+        <!-- 分配面试官 -->
+        <div class="card">
+            <h3>分配面试官到场次</h3>
+            <form id="assignForm" class="form-row" style="flex-wrap: wrap;">
+                <div class="form-group" style="flex: 1; min-width: 150px;">
+                    <select id="assignInterview" required>
+                        <option value="">选择面试场次</option>
+                    </select>
+                </div>
+                <div class="form-group" style="flex: 1; min-width: 150px;">
+                    <select id="assignInterviewer" required>
+                        <option value="">选择面试官</option>
+                    </select>
+                </div>
+                <div class="form-group" style="flex: 1; min-width: 150px;">
+                    <select id="assignTimeSlot">
+                        <option value="">全部时间段</option>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <button type="submit" class="btn btn-success">分配</button>
+                </div>
+            </form>
+
+            <h4 style="margin-top: 20px;">已分配列表</h4>
+            <table id="assignmentTable">
+                <thead>
+                    <tr>
+                        <th>面试场次</th>
+                        <th>面试官</th>
+                        <th>时间段</th>
+                        <th>操作</th>
+                    </tr>
+                </thead>
+                <tbody></tbody>
+            </table>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+async function loadInterviewers() {
+    try {
+        const response = await fetch('/api/interviewers');
+        const interviewers = await response.json();
+
+        const tbody = document.querySelector('#interviewerTable tbody');
+        tbody.innerHTML = '';
+
+        interviewers.forEach(interviewer => {
+            const tr = document.createElement('tr');
+            tr.innerHTML = `
+                <td>${interviewer.name}</td>
+                <td>${interviewer.username}</td>
+                <td>
+                    <button class="btn btn-sm btn-danger" onclick="alert('面试官账号由系统管理员统一管理，如需删除请联系管理员')">删除</button>
+                </td>
+            `;
+            tbody.appendChild(tr);
+        });
+    } catch (error) {
+        console.error('加载失败:', error);
+    }
+}
+
+async function loadInterviewsForSelect() {
+    try {
+        const response = await fetch('/api/interviews');
+        const interviews = await response.json();
+
+        const select = document.getElementById('assignInterview');
+        select.innerHTML = '<option value="">选择面试场次</option>';
+        interviews.forEach(i => {
+            select.innerHTML += `<option value="${i.id}">${i.title}</option>`;
+        });
+    } catch (error) {
+        console.error('加载失败:', error);
+    }
+}
+
+async function loadInterviewersForSelect() {
+    try {
+        const response = await fetch('/api/interviewers');
+        const interviewers = await response.json();
+
+        const select = document.getElementById('assignInterviewer');
+        select.innerHTML = '<option value="">选择面试官</option>';
+        interviewers.forEach(i => {
+            select.innerHTML += `<option value="${i.id}">${i.name}</option>`;
+        });
+    } catch (error) {
+        console.error('加载失败:', error);
+    }
+}
+
+async function loadAssignments() {
+    try {
+        // 获取所有场次的分配情况
+        const response = await fetch('/api/interviews');
+        const interviews = await response.json();
+
+        const tbody = document.querySelector('#assignmentTable tbody');
+        tbody.innerHTML = '';
+
+        if (interviews.length === 0) {
+            tbody.innerHTML = '<tr><td colspan="4" style="text-align:center;">暂无数据</td></tr>';
+            return;
+        }
+
+        for (const interview of interviews) {
+            const resp = await fetch(`/api/interviews/${interview.id}/assignments`);
+            const assignments = await resp.json();
+
+            assignments.forEach(a => {
+                const tr = document.createElement('tr');
+                tr.innerHTML = `
+                    <td>${interview.title}</td>
+                    <td>${a.interviewer_name}</td>
+                    <td>${a.start_time ? `${a.start_time} - ${a.end_time}` : '全部时间段'}</td>
+                    <td><button class="btn btn-sm btn-danger" onclick="deleteAssignment(${a.id})">取消分配</button></td>
+                `;
+                tbody.appendChild(tr);
+            });
+        }
+
+        if (tbody.children.length === 0) {
+            tbody.innerHTML = '<tr><td colspan="4" style="text-align:center;">暂无分配</td></tr>';
+        }
+    } catch (error) {
+        console.error('加载失败:', error);
+    }
+}
+
+async function loadTimeSlotsForSelect(interviewId) {
+    try {
+        const response = await fetch(`/api/interviews/${interviewId}/time-slots`);
+        const slots = await response.json();
+
+        const select = document.getElementById('assignTimeSlot');
+        select.innerHTML = '<option value="">全部时间段</option>';
+        slots.forEach(s => {
+            select.innerHTML += `<option value="${s.id}">${s.start_time} - ${s.end_time}</option>`;
+        });
+    } catch (error) {
+        console.error('加载失败:', error);
+    }
+}
+
+document.getElementById('addInterviewerForm').addEventListener('submit', async function(e) {
+    e.preventDefault();
+    const name = document.getElementById('interviewerName').value.trim();
+    const username = document.getElementById('interviewerUsername').value.trim();
+    const password = document.getElementById('interviewerPassword').value;
+
+    try {
+        const response = await fetch('/api/interviewers', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ name, username, password })
+        });
+        const data = await response.json();
+
+        if (data.success) {
+            showMessage('添加成功', 'success');
+            document.getElementById('addInterviewerForm').reset();
+            loadInterviewers();
+            loadInterviewersForSelect();
+        } else {
+            showMessage(data.message || '添加失败', 'error');
+        }
+    } catch (error) {
+        showMessage('添加失败', 'error');
+    }
+});
+
+document.getElementById('assignInterview').addEventListener('change', function() {
+    const interviewId = this.value;
+    if (interviewId) {
+        loadTimeSlotsForSelect(interviewId);
+    } else {
+        document.getElementById('assignTimeSlot').innerHTML = '<option value="">全部时间段</option>';
+    }
+});
+
+document.getElementById('assignForm').addEventListener('submit', async function(e) {
+    e.preventDefault();
+    const interviewId = document.getElementById('assignInterview').value;
+    const interviewerId = document.getElementById('assignInterviewer').value;
+    const timeSlotId = document.getElementById('assignTimeSlot').value;
+
+    try {
+        const response = await fetch(`/api/interviews/${interviewId}/assignments`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                interviewer_id: parseInt(interviewerId),
+                time_slot_id: timeSlotId ? parseInt(timeSlotId) : null
+            })
+        });
+        const data = await response.json();
+
+        if (data.success) {
+            showMessage('分配成功', 'success');
+            loadAssignments();
+        } else {
+            showMessage(data.message || '分配失败', 'error');
+        }
+    } catch (error) {
+        showMessage('分配失败', 'error');
+    }
+});
+
+async function deleteAssignment(assignmentId) {
+    if (!confirm('确定要取消此分配吗？')) return;
+
+    try {
+        const response = await fetch(`/api/assignments/${assignmentId}`, { method: 'DELETE' });
+        const data = await response.json();
+        if (data.success) {
+            showMessage('取消成功', 'success');
+            loadAssignments();
+        }
+    } catch (error) {
+        showMessage('取消失败', 'error');
+    }
+}
+
+function showMessage(msg, type) {
+    const div = document.getElementById('message');
+    div.className = `message ${type}`;
+    div.textContent = msg;
+    setTimeout(() => { div.textContent = ''; }, 3000);
+}
+
+loadInterviewers();
+loadInterviewsForSelect();
+loadInterviewersForSelect();
+loadAssignments();
+</script>
+{% endblock %}

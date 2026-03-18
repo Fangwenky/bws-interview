@@ -1,0 +1,230 @@
+{% extends "base.html" %}
+
+{% block title %}面试官工作台 - 博物社面试管理系统{% endblock %}
+
+{% block content %}
+<div class="interviewer-layout">
+    <div class="sidebar">
+        <h2>面试官工作台</h2>
+        <ul>
+            <li><a href="/interviewer" class="active">我的面试</a></li>
+            <li><a href="/logout">退出登录</a></li>
+        </ul>
+        <div class="user-info">
+            <p>欢迎，{{ session.name }}</p>
+        </div>
+    </div>
+    <div class="main-content">
+        <h1 class="page-title">我的面试</h1>
+
+        <div id="message"></div>
+
+        <div id="applicationList" class="application-list"></div>
+    </div>
+</div>
+
+<!-- 评分弹窗 -->
+<div class="modal" id="scoreModal">
+    <div class="modal-content">
+        <div class="modal-header">
+            <h3>面试评分</h3>
+            <button class="modal-close" onclick="closeScoreModal()">&times;</button>
+        </div>
+        <form id="scoreForm">
+            <input type="hidden" id="scoreAppId">
+            <div class="card" style="background:#f8f9fa;">
+                <p><strong>面试者：</strong><span id="scoreStudentName"></span></p>
+                <p><strong>学号：</strong><span id="scoreStudentNumber"></span></p>
+                <p><strong>志愿职位：</strong><span id="scorePositions"></span></p>
+            </div>
+            <div class="form-group">
+                <label>到场状态 *</label>
+                <select id="attendance" required>
+                    <option value="">请选择</option>
+                    <option value="present">已到场</option>
+                    <option value="absent">未到场</option>
+                </select>
+            </div>
+            <div class="form-group">
+                <label>面试结果 *</label>
+                <select id="result" required>
+                    <option value="">请选择</option>
+                    <option value="pass">通过</option>
+                    <option value="fail">未通过</option>
+                    <option value="pending">待定</option>
+                </select>
+            </div>
+            <div class="form-group">
+                <label>面试评语</label>
+                <textarea id="comment" rows="4" placeholder="请输入面试评语（可选）"></textarea>
+            </div>
+            <div class="form-group">
+                <button type="submit" class="btn btn-primary">提交评分</button>
+                <button type="button" class="btn btn-secondary" onclick="closeScoreModal()">取消</button>
+            </div>
+        </form>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+let currentApplications = [];
+
+async function loadApplications() {
+    try {
+        const response = await fetch('/api/applications');
+        const applications = await response.json();
+        currentApplications = applications;
+
+        const container = document.getElementById('applicationList');
+
+        if (applications.length === 0) {
+            container.innerHTML = `
+                <div class="empty-state">
+                    <h3>暂无待面试的学生</h3>
+                    <p>当前没有分配给您面试的学生，请联系管理员确认分配情况。</p>
+                </div>
+            `;
+            return;
+        }
+
+        // 按场次和时间段分组
+        const grouped = {};
+        applications.forEach(app => {
+            const key = `${app.interview_title}|${app.start_time}`;
+            if (!grouped[key]) {
+                grouped[key] = {
+                    title: app.interview_title,
+                    time: `${app.start_time} - ${app.end_time}`,
+                    students: []
+                };
+            }
+            grouped[key].students.push(app);
+        });
+
+        let html = '';
+        for (const key in grouped) {
+            const group = grouped[key];
+            html += `
+                <div class="card">
+                    <h3>${group.title}</h3>
+                    <p class="application-time">${group.time}</p>
+                    <table>
+                        <thead>
+                            <tr>
+                                <th>姓名</th>
+                                <th>学号</th>
+                                <th>志愿职位</th>
+                                <th>是否接受调剂</th>
+                                <th>报名状态</th>
+                                <th>面试结果</th>
+                                <th>操作</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+            `;
+
+            for (const student of group.students) {
+                // 获取面试结果
+                const resultResp = await fetch(`/api/applications/${student.id}/result`);
+                const results = await resultResp.json();
+
+                let resultHtml = '-';
+                let canScore = true;
+
+                if (results.length > 0) {
+                    const r = results[0];
+                    if (r.result === 'pass') resultHtml = '<span class="badge badge-success">通过</span>';
+                    else if (r.result === 'fail') resultHtml = '<span class="badge badge-danger">未通过</span>';
+                    else resultHtml = '<span class="badge badge-warning">待定</span>';
+
+                    if (r.attendance === 'absent') canScore = false;
+                }
+
+                let statusHtml = student.status === 'pending'
+                    ? '<span class="badge badge-info">已报名</span>'
+                    : '<span class="badge badge-danger">已取消</span>';
+
+                html += `
+                    <tr>
+                        <td>${student.student_name}</td>
+                        <td>${student.student_number}</td>
+                        <td>${student.first_position}${student.second_position ? '<br><small>第二志愿：' + student.second_position + '</small>' : ''}</td>
+                        <td>${student.accept_adjust ? '是' : '否'}</td>
+                        <td>${statusHtml}</td>
+                        <td>${resultHtml}</td>
+                        <td>
+                            ${student.status === 'pending' && canScore
+                                ? `<button class="btn btn-sm btn-primary" onclick="showScoreModal(${student.id}, '${student.student_name}', '${student.student_number}', '${student.first_position}${student.second_position ? ' / ' + student.second_position : ''}')">评分</button>`
+                                : '-'}
+                        </td>
+                    </tr>
+                `;
+            }
+
+            html += `
+                        </tbody>
+                    </table>
+                </div>
+            `;
+        }
+
+        container.innerHTML = html;
+    } catch (error) {
+        console.error('加载失败:', error);
+        showMessage('加载失败', 'error');
+    }
+}
+
+function showScoreModal(appId, name, number, positions) {
+    document.getElementById('scoreAppId').value = appId;
+    document.getElementById('scoreStudentName').textContent = name;
+    document.getElementById('scoreStudentNumber').textContent = number;
+    document.getElementById('scorePositions').textContent = positions;
+    document.getElementById('scoreForm').reset();
+    document.getElementById('scoreModal').classList.add('show');
+}
+
+function closeScoreModal() {
+    document.getElementById('scoreModal').classList.remove('show');
+}
+
+document.getElementById('scoreForm').addEventListener('submit', async function(e) {
+    e.preventDefault();
+
+    const appId = document.getElementById('scoreAppId').value;
+    const attendance = document.getElementById('attendance').value;
+    const result = document.getElementById('result').value;
+    const comment = document.getElementById('comment').value.trim();
+
+    try {
+        const response = await fetch(`/api/applications/${appId}/result`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ attendance, result, comment })
+        });
+        const data = await response.json();
+
+        if (data.success) {
+            showMessage('评分成功', 'success');
+            closeScoreModal();
+            loadApplications();
+        } else {
+            showMessage(data.message || '评分失败', 'error');
+        }
+    } catch (error) {
+        showMessage('评分失败', 'error');
+    }
+});
+
+function showMessage(msg, type) {
+    const div = document.getElementById('message');
+    div.className = `message ${type}`;
+    div.textContent = msg;
+    setTimeout(() => { div.textContent = ''; }, 3000);
+}
+
+loadApplications();
+</script>
+{% endblock %}

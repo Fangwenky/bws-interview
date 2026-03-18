@@ -1,0 +1,337 @@
+{% extends "base.html" %}
+
+{% block title %}面试报名 - 博物社面试管理系统{% endblock %}
+
+{% block content %}
+<div class="student-layout">
+    <div class="sidebar">
+        <h2>面试报名</h2>
+        <ul>
+            <li><a href="/student" class="active">可报名的场次</a></li>
+            <li><a href="/student" onclick="showMyApplications()">我的报名</a></li>
+            <li><a href="/logout">退出登录</a></li>
+        </ul>
+        <div class="user-info">
+            <p>欢迎，{{ session.name }}</p>
+            <p>学号：{{ session.username }}</p>
+        </div>
+    </div>
+    <div class="main-content">
+        <h1 class="page-title">可报名的面试场次</h1>
+
+        <div id="message"></div>
+
+        <div id="interviewList"></div>
+    </div>
+</div>
+
+<!-- 报名弹窗 -->
+<div class="modal" id="applyModal">
+    <div class="modal-content">
+        <div class="modal-header">
+            <h3>报名面试</h3>
+            <button class="modal-close" onclick="closeApplyModal()">&times;</button>
+        </div>
+        <form id="applyForm">
+            <input type="hidden" id="applyInterviewId">
+            <div class="card" style="background:#f8f9fa; margin-bottom:20px;">
+                <p><strong>面试场次：</strong><span id="applyInterviewTitle"></span></p>
+                <p><strong>面试地点：</strong><span id="applyLocation"></span></p>
+            </div>
+
+            <div class="form-group">
+                <label>选择时间段 *</label>
+                <div id="timeSlotGrid" class="time-slot-grid"></div>
+                <input type="hidden" id="selectedTimeSlot" required>
+            </div>
+
+            <div class="form-row">
+                <div class="form-group">
+                    <label for="firstPosition">第一志愿 *</label>
+                    <select id="firstPosition" required>
+                        <option value="">请选择</option>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label for="secondPosition">第二志愿</label>
+                    <select id="secondPosition">
+                        <option value="">无</option>
+                    </select>
+                </div>
+            </div>
+
+            <div class="form-group">
+                <label for="phone">联系电话 *</label>
+                <input type="tel" id="phone" required placeholder="请输入手机号码">
+            </div>
+
+            <div class="form-group">
+                <div class="checkbox-group">
+                    <input type="checkbox" id="acceptAdjust">
+                    <label for="acceptAdjust">我愿意接受调剂到其他部门</label>
+                </div>
+            </div>
+
+            <div class="form-group">
+                <button type="submit" class="btn btn-primary">提交报名</button>
+                <button type="button" class="btn btn-secondary" onclick="closeApplyModal()">取消</button>
+            </div>
+        </form>
+    </div>
+</div>
+
+<!-- 我的报名弹窗 -->
+<div class="modal" id="myAppsModal">
+    <div class="modal-content" style="max-width:600px;">
+        <div class="modal-header">
+            <h3>我的报名</h3>
+            <button class="modal-close" onclick="closeMyAppsModal()">&times;</button>
+        </div>
+        <div id="myAppsContent"></div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+let allInterviews = [];
+let selectedTimeSlotId = null;
+let currentPositions = [];
+
+async function loadInterviews() {
+    try {
+        const response = await fetch('/api/interviews');
+        const interviews = await response.json();
+        allInterviews = interviews;
+
+        const container = document.getElementById('interviewList');
+
+        if (interviews.length === 0) {
+            container.innerHTML = `
+                <div class="empty-state">
+                    <h3>暂无可报名的面试场次</h3>
+                    <p>请留意社团通知，了解最新的招新安排。</p>
+                </div>
+            `;
+            return;
+        }
+
+        // 检查是否已有报名
+        const appsResp = await fetch('/api/applications');
+        const myApps = await appsResp.json();
+        const hasApplied = myApps.length > 0 && myApps.some(a => a.status === 'pending');
+
+        let html = '';
+        interviews.forEach(interview => {
+            const positions = interview.positions ? interview.positions.join('、') : '未设置职位';
+            html += `
+                <div class="card">
+                    <div class="application-header">
+                        <span class="application-title">${interview.title}</span>
+                        ${hasApplied
+                            ? '<span class="badge badge-warning">您已报名</span>'
+                            : `<button class="btn btn-sm btn-primary" onclick="showApplyModal(${interview.id}, '${interview.title}', '${interview.location || ''}', '${interview.positions ? interview.positions.join(',') : ''}')">立即报名</button>`
+                        }
+                    </div>
+                    <p><strong>日期：</strong>${interview.date || '待定'}</p>
+                    <p><strong>地点：</strong>${interview.location || '待定'}</p>
+                    <p><strong>可面试职位：</strong>${positions}</p>
+                    ${interview.note ? `<p><strong>备注：</strong>${interview.note}</p>` : ''}
+                </div>
+            `;
+        });
+
+        container.innerHTML = html;
+    } catch (error) {
+        console.error('加载失败:', error);
+    }
+}
+
+function showApplyModal(interviewId, title, location, positionsStr) {
+    document.getElementById('applyInterviewId').value = interviewId;
+    document.getElementById('applyInterviewTitle').textContent = title;
+    document.getElementById('applyLocation').textContent = location || '待定';
+    document.getElementById('applyForm').reset();
+
+    // 设置职位选项
+    currentPositions = positionsStr ? positionsStr.split(',').filter(p => p) : [];
+    const firstSelect = document.getElementById('firstPosition');
+    const secondSelect = document.getElementById('secondPosition');
+
+    firstSelect.innerHTML = '<option value="">请选择</option>';
+    secondSelect.innerHTML = '<option value="">无</option>';
+
+    currentPositions.forEach(p => {
+        firstSelect.innerHTML += `<option value="${p}">${p}</option>`;
+        secondSelect.innerHTML += `<option value="${p}">${p}</option>`;
+    });
+
+    // 加载时间段
+    loadTimeSlots(interviewId);
+
+    document.getElementById('applyModal').classList.add('show');
+}
+
+async function loadTimeSlots(interviewId) {
+    try {
+        const response = await fetch(`/api/interviews/${interviewId}/time-slots`);
+        const slots = await response.json();
+
+        const grid = document.getElementById('timeSlotGrid');
+        grid.innerHTML = '';
+
+        if (slots.length === 0) {
+            grid.innerHTML = '<p style="color:#999;">该场次暂未设置时间段</p>';
+            return;
+        }
+
+        slots.forEach(slot => {
+            const isFull = slot.applied_count >= slot.max_count;
+            const div = document.createElement('div');
+            div.className = `time-slot-item ${isFull ? 'full' : ''}`;
+            div.innerHTML = `
+                <div class="time">${slot.start_time} - ${slot.end_time}</div>
+                <div class="count">${slot.applied_count} / ${slot.max_count}人</div>
+            `;
+            if (!isFull) {
+                div.onclick = () => selectTimeSlot(slot.id, div);
+            }
+            grid.appendChild(div);
+        });
+    } catch (error) {
+        console.error('加载时间段失败:', error);
+    }
+}
+
+function selectTimeSlot(slotId, element) {
+    selectedTimeSlotId = slotId;
+    document.getElementById('selectedTimeSlot').value = slotId;
+
+    // 移除其他选中状态
+    document.querySelectorAll('.time-slot-item').forEach(el => el.classList.remove('selected'));
+    element.classList.add('selected');
+}
+
+function closeApplyModal() {
+    document.getElementById('applyModal').classList.remove('show');
+    selectedTimeSlotId = null;
+}
+
+async function showMyApplications() {
+    try {
+        const response = await fetch('/api/applications');
+        const applications = await response.json();
+
+        const container = document.getElementById('myAppsContent');
+
+        if (applications.length === 0) {
+            container.innerHTML = '<p style="text-align:center;color:#999;">您还没有报名任何面试场次</p>';
+        } else {
+            let html = '';
+            applications.forEach(app => {
+                const statusText = app.status === 'pending'
+                    ? '<span class="badge badge-info">已报名</span>'
+                    : '<span class="badge badge-danger">已取消</span>';
+
+                html += `
+                    <div class="card">
+                        <p><strong>面试场次：</strong>${app.interview_title}</p>
+                        <p><strong>时间段：</strong>${app.start_time} - ${app.end_time}</p>
+                        <p><strong>第一志愿：</strong>${app.first_position}</p>
+                        <p><strong>第二志愿：</strong>${app.second_position || '-'}</p>
+                        <p><strong>联系电话：</strong>${app.phone || '-'}</p>
+                        <p><strong>报名状态：</strong>${statusText}</p>
+                        ${app.status === 'pending' ? `<button class="btn btn-sm btn-danger" onclick="cancelApplication(${app.id})">取消报名</button>` : ''}
+                    </div>
+                `;
+            });
+            container.innerHTML = html;
+        }
+
+        document.getElementById('myAppsModal').classList.add('show');
+    } catch (error) {
+        console.error('加载失败:', error);
+    }
+}
+
+function closeMyAppsModal() {
+    document.getElementById('myAppsModal').classList.remove('show');
+}
+
+async function cancelApplication(appId) {
+    if (!confirm('确定要取消报名吗？取消后需要重新报名。')) return;
+
+    try {
+        const response = await fetch(`/api/applications/${appId}`, { method: 'DELETE' });
+        const data = await response.json();
+
+        if (data.success) {
+            showMessage('取消报名成功', 'success');
+            showMyApplications(); // 刷新列表
+            loadInterviews(); // 刷新场次列表
+        } else {
+            showMessage(data.message || '取消失败', 'error');
+        }
+    } catch (error) {
+        showMessage('取消失败', 'error');
+    }
+}
+
+document.getElementById('applyForm').addEventListener('submit', async function(e) {
+    e.preventDefault();
+
+    const interviewId = document.getElementById('applyInterviewId').value;
+    const timeSlotId = selectedTimeSlotId;
+    const firstPosition = document.getElementById('firstPosition').value;
+    const secondPosition = document.getElementById('secondPosition').value;
+    const phone = document.getElementById('phone').value.trim();
+    const acceptAdjust = document.getElementById('acceptAdjust').checked;
+
+    if (!timeSlotId) {
+        showMessage('请选择面试时间段', 'error');
+        return;
+    }
+
+    try {
+        const response = await fetch('/api/applications', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                interview_id: parseInt(interviewId),
+                time_slot_id: timeSlotId,
+                first_position: firstPosition,
+                second_position: secondPosition,
+                phone: phone,
+                accept_adjust: acceptAdjust
+            })
+        });
+        const data = await response.json();
+
+        if (data.success) {
+            showMessage('报名成功！', 'success');
+            closeApplyModal();
+            loadInterviews();
+        } else {
+            showMessage(data.message || '报名失败', 'error');
+        }
+    } catch (error) {
+        showMessage('报名失败', 'error');
+    }
+});
+
+function showMessage(msg, type) {
+    const div = document.getElementById('message');
+    div.className = `message ${type}`;
+    div.textContent = msg;
+    setTimeout(() => { div.textContent = ''; }, 3000);
+}
+
+// 添加点击我的报名菜单显示
+document.querySelector('a[onclick="showMyApplications()"]').addEventListener('click', function(e) {
+    e.preventDefault();
+    showMyApplications();
+});
+
+loadInterviews();
+</script>
+{% endblock %}

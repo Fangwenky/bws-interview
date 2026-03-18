@@ -1,0 +1,316 @@
+{% extends "base.html" %}
+
+{% block title %}面试场次管理 - 博物社面试管理系统{% endblock %}
+
+{% block content %}
+<div class="admin-layout">
+    <div class="sidebar">
+        <h2>管理后台</h2>
+        <ul>
+            <li><a href="/admin">仪表盘</a></li>
+            <li><a href="/admin/interviews" class="active">面试场次管理</a></li>
+            <li><a href="/admin/interviewers">面试官管理</a></li>
+            <li><a href="/admin/results">面试结果查看</a></li>
+            <li><a href="/logout">退出登录</a></li>
+        </ul>
+        <div class="user-info">
+            <p>欢迎，{{ session.name }}</p>
+        </div>
+    </div>
+    <div class="main-content">
+        <h1 class="page-title">面试场次管理</h1>
+
+        <div class="action-buttons" style="margin-bottom: 20px;">
+            <button class="btn btn-primary" onclick="showAddModal()">+ 添加面试场次</button>
+        </div>
+
+        <div id="message"></div>
+
+        <table id="interviewTable">
+            <thead>
+                <tr>
+                    <th>面试标题</th>
+                    <th>日期</th>
+                    <th>地点</th>
+                    <th>可面试职位</th>
+                    <th>操作</th>
+                </tr>
+            </thead>
+            <tbody></tbody>
+        </table>
+    </div>
+</div>
+
+<!-- 添加/编辑面试场次弹窗 -->
+<div class="modal" id="interviewModal">
+    <div class="modal-content">
+        <div class="modal-header">
+            <h3 id="modalTitle">添加面试场次</h3>
+            <button class="modal-close" onclick="closeModal()">&times;</button>
+        </div>
+        <form id="interviewForm">
+            <input type="hidden" id="interviewId">
+            <div class="form-group">
+                <label for="title">面试标题 *</label>
+                <input type="text" id="title" required placeholder="如：2025春季招新面试">
+            </div>
+            <div class="form-group">
+                <label for="date">面试日期</label>
+                <input type="date" id="date">
+            </div>
+            <div class="form-group">
+                <label for="location">面试地点</label>
+                <input type="text" id="location" placeholder="如：学生活动中心302">
+            </div>
+            <div class="form-group">
+                <label for="positions">可面试职位（用逗号分隔）</label>
+                <input type="text" id="positions" placeholder="如：宣传部、技术部、策划部">
+            </div>
+            <div class="form-group">
+                <label for="note">备注</label>
+                <textarea id="note" rows="3" placeholder="其他补充说明"></textarea>
+            </div>
+            <div class="form-group">
+                <button type="submit" class="btn btn-primary">保存</button>
+                <button type="button" class="btn btn-secondary" onclick="closeModal()">取消</button>
+            </div>
+        </form>
+    </div>
+</div>
+
+<!-- 时间段管理弹窗 -->
+<div class="modal" id="timeSlotModal">
+    <div class="modal-content">
+        <div class="modal-header">
+            <h3>管理时间段</h3>
+            <button class="modal-close" onclick="closeTimeSlotModal()">&times;</button>
+        </div>
+        <input type="hidden" id="currentInterviewId">
+        <div class="form-group">
+            <label>添加时间段</label>
+            <div class="form-row">
+                <input type="time" id="startTime" placeholder="开始时间">
+                <input type="time" id="endTime" placeholder="结束时间">
+                <input type="number" id="maxCount" placeholder="人数上限" value="3" min="1" style="width: 100px;">
+            </div>
+            <button class="btn btn-success btn-sm" onclick="addTimeSlot()">添加</button>
+        </div>
+        <div id="timeSlotList"></div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+let editingId = null;
+
+async function loadInterviews() {
+    try {
+        const response = await fetch('/api/interviews');
+        const interviews = await response.json();
+
+        const tbody = document.querySelector('#interviewTable tbody');
+        tbody.innerHTML = '';
+
+        if (interviews.length === 0) {
+            tbody.innerHTML = '<tr><td colspan="5" style="text-align:center;">暂无面试场次</td></tr>';
+            return;
+        }
+
+        interviews.forEach(interview => {
+            const tr = document.createElement('tr');
+            const positions = interview.positions ? interview.positions.join('、') : '-';
+            tr.innerHTML = `
+                <td>${interview.title}</td>
+                <td>${interview.date || '-'}</td>
+                <td>${interview.location || '-'}</td>
+                <td>${positions}</td>
+                <td>
+                    <div class="action-buttons">
+                        <button class="btn btn-sm btn-secondary" onclick="manageTimeSlots(${interview.id})">时间段</button>
+                        <button class="btn btn-sm btn-primary" onclick="editInterview(${interview.id}, '${interview.title}', '${interview.date || ''}', '${interview.location || ''}', '${interview.positions ? interview.positions.join(',') : ''}', '${interview.note || ''}')">编辑</button>
+                        <button class="btn btn-sm btn-danger" onclick="deleteInterview(${interview.id})">删除</button>
+                    </div>
+                </td>
+            `;
+            tbody.appendChild(tr);
+        });
+    } catch (error) {
+        console.error('加载失败:', error);
+        showMessage('加载失败', 'error');
+    }
+}
+
+function showAddModal() {
+    editingId = null;
+    document.getElementById('modalTitle').textContent = '添加面试场次';
+    document.getElementById('interviewForm').reset();
+    document.getElementById('interviewId').value = '';
+    document.getElementById('interviewModal').classList.add('show');
+}
+
+function editInterview(id, title, date, location, positions, note) {
+    editingId = id;
+    document.getElementById('modalTitle').textContent = '编辑面试场次';
+    document.getElementById('interviewId').value = id;
+    document.getElementById('title').value = title;
+    document.getElementById('date').value = date;
+    document.getElementById('location').value = location;
+    document.getElementById('positions').value = positions;
+    document.getElementById('note').value = note;
+    document.getElementById('interviewModal').classList.add('show');
+}
+
+function closeModal() {
+    document.getElementById('interviewModal').classList.remove('show');
+}
+
+async function deleteInterview(id) {
+    if (!confirm('确定要删除此面试场次吗？删除后相关报名数据也会被清除。')) {
+        return;
+    }
+
+    try {
+        const response = await fetch(`/api/interviews/${id}`, { method: 'DELETE' });
+        const data = await response.json();
+        if (data.success) {
+            showMessage('删除成功', 'success');
+            loadInterviews();
+        } else {
+            showMessage(data.message || '删除失败', 'error');
+        }
+    } catch (error) {
+        showMessage('删除失败', 'error');
+    }
+}
+
+document.getElementById('interviewForm').addEventListener('submit', async function(e) {
+    e.preventDefault();
+
+    const title = document.getElementById('title').value.trim();
+    const date = document.getElementById('date').value;
+    const location = document.getElementById('location').value.trim();
+    const positionsStr = document.getElementById('positions').value.trim();
+    const note = document.getElementById('note').value.trim();
+
+    const positions = positionsStr ? positionsStr.split(',').map(p => p.trim()).filter(p => p) : [];
+
+    const url = editingId ? `/api/interviews/${editingId}` : '/api/interviews';
+    const method = editingId ? 'PUT' : 'POST';
+
+    try {
+        const response = await fetch(url, {
+            method: method,
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ title, date, location, positions, note })
+        });
+        const data = await response.json();
+
+        if (data.success) {
+            showMessage('保存成功', 'success');
+            closeModal();
+            loadInterviews();
+        } else {
+            showMessage(data.message || '保存失败', 'error');
+        }
+    } catch (error) {
+        showMessage('保存失败', 'error');
+    }
+});
+
+// 时间段管理
+async function manageTimeSlots(interviewId) {
+    document.getElementById('currentInterviewId').value = interviewId;
+    await loadTimeSlots(interviewId);
+    document.getElementById('timeSlotModal').classList.add('show');
+}
+
+async function loadTimeSlots(interviewId) {
+    try {
+        const response = await fetch(`/api/interviews/${interviewId}/time-slots`);
+        const slots = await response.json();
+
+        const container = document.getElementById('timeSlotList');
+        if (slots.length === 0) {
+            container.innerHTML = '<p style="color:#999;">暂无时间段</p>';
+            return;
+        }
+
+        container.innerHTML = '<table><thead><tr><th>时间段</th><th>人数上限</th><th>已报名</th><th>操作</th></tr></thead><tbody></tbody></table>';
+        const tbody = container.querySelector('tbody');
+
+        slots.forEach(slot => {
+            const tr = document.createElement('tr');
+            tr.innerHTML = `
+                <td>${slot.start_time} - ${slot.end_time}</td>
+                <td>${slot.max_count}</td>
+                <td>${slot.applied_count} / ${slot.max_count}</td>
+                <td><button class="btn btn-sm btn-danger" onclick="deleteTimeSlot(${slot.id})">删除</button></td>
+            `;
+            tbody.appendChild(tr);
+        });
+    } catch (error) {
+        console.error('加载时间段失败:', error);
+    }
+}
+
+async function addTimeSlot() {
+    const interviewId = document.getElementById('currentInterviewId').value;
+    const startTime = document.getElementById('startTime').value;
+    const endTime = document.getElementById('endTime').value;
+    const maxCount = parseInt(document.getElementById('maxCount').value) || 3;
+
+    if (!startTime || !endTime) {
+        alert('请填写开始和结束时间');
+        return;
+    }
+
+    try {
+        const response = await fetch(`/api/interviews/${interviewId}/time-slots`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ start_time: startTime, end_time: endTime, max_count: maxCount })
+        });
+        const data = await response.json();
+
+        if (data.success) {
+            loadTimeSlots(interviewId);
+            document.getElementById('startTime').value = '';
+            document.getElementById('endTime').value = '';
+        } else {
+            alert(data.message || '添加失败');
+        }
+    } catch (error) {
+        alert('添加失败');
+    }
+}
+
+async function deleteTimeSlot(slotId) {
+    if (!confirm('确定要删除此时间段吗？')) return;
+
+    try {
+        const response = await fetch(`/api/time-slots/${slotId}`, { method: 'DELETE' });
+        const data = await response.json();
+        if (data.success) {
+            const interviewId = document.getElementById('currentInterviewId').value;
+            loadTimeSlots(interviewId);
+        }
+    } catch (error) {
+        alert('删除失败');
+    }
+}
+
+function closeTimeSlotModal() {
+    document.getElementById('timeSlotModal').classList.remove('show');
+}
+
+function showMessage(msg, type) {
+    const div = document.getElementById('message');
+    div.className = `message ${type}`;
+    div.textContent = msg;
+    setTimeout(() => { div.textContent = ''; }, 3000);
+}
+
+loadInterviews();
+</script>
+{% endblock %}
