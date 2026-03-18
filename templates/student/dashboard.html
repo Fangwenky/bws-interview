@@ -344,17 +344,13 @@ document.getElementById('applyForm').addEventListener('submit', async function(e
 });
 
 function showMessage(msg, type) {
-    const div = document.getElementById('message');
-    div.className = `message ${type}`;
-    div.textContent = msg;
-    setTimeout(function() { div.textContent = ''; }, 3000);
+    var div = document.getElementById('message');
+    if (div) {
+        div.className = 'message ' + type;
+        div.textContent = msg;
+        setTimeout(function() { div.textContent = ''; }, 3000);
+    }
 }
-
-// 添加点击我的报名菜单显示
-document.querySelector('a[onclick="showMyApplications()"]').addEventListener('click', function(e) {
-    e.preventDefault();
-    showMyApplications();
-});
 
 loadInterviews();
 </script>
