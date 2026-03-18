@@ -293,11 +293,12 @@ async function loadTimeSlots(interviewId) {
 
 async function addTimeSlot() {
     const interviewId = document.getElementById('currentInterviewId').value;
-    let roomId = document.getElementById('slotRoom').value;
+    const roomIdSelect = document.getElementById('slotRoom');
+    const roomId = roomIdSelect.value;
     const startTime = document.getElementById('startTime').value;
     const endTime = document.getElementById('endTime').value;
 
-    if (!roomId || roomId === 'all') {
+    if (!roomId) {
         alert('请选择房间');
         return;
     }
@@ -308,7 +309,7 @@ async function addTimeSlot() {
 
     try {
         // 如果选择"所有房间"，则为每个房间添加时间段
-        if (document.getElementById('slotRoom').value === 'all') {
+        if (roomId === 'all') {
             // 先获取所有房间
             const roomsResp = await fetch(`/api/interviews/${interviewId}/rooms`);
             const rooms = await roomsResp.json();
