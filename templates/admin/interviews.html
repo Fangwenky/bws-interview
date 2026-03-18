@@ -139,7 +139,7 @@ async function loadInterviews() {
             return;
         }
 
-        interviews.forEach(interview => {
+        interviews.forEach(function(interview) {
             const tr = document.createElement('tr');
             const positions = interview.positions ? interview.positions.join('、') : '-';
             tr.innerHTML = `
@@ -216,7 +216,7 @@ document.getElementById('interviewForm').addEventListener('submit', async functi
     const positionsStr = document.getElementById('positions').value.trim();
     const note = document.getElementById('note').value.trim();
 
-    const positions = positionsStr ? positionsStr.split(',').map(p => p.trim()).filter(p => p) : [];
+    const positions = positionsStr ? positionsStr.split(',').map(function(p) { return p.trim(); }).filter(function(p) { return p; }) : [];
 
     const url = editingId ? `/api/interviews/${editingId}` : '/api/interviews';
     const method = editingId ? 'PUT' : 'POST';
@@ -382,7 +382,7 @@ async function loadRooms(interviewId) {
         container.innerHTML = '<table><thead><tr><th>房间名称</th><th>容量</th><th>已报名</th><th>操作</th></tr></thead><tbody></tbody></table>';
         const tbody = container.querySelector('tbody');
 
-        rooms.forEach(room => {
+        rooms.forEach(function(room) {
             const tr = document.createElement('tr');
             tr.innerHTML = `
                 <td>${room.name}</td>
@@ -448,7 +448,7 @@ function showMessage(msg, type) {
     const div = document.getElementById('message');
     div.className = `message ${type}`;
     div.textContent = msg;
-    setTimeout(() => { div.textContent = ''; }, 3000);
+    setTimeout(function() { div.textContent = ''; }, 3000);
 }
 
 loadInterviews();

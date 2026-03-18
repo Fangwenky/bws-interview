@@ -77,7 +77,7 @@ async function loadStats() {
 
         const tbody = document.querySelector('#statsTable tbody');
         tbody.innerHTML = '';
-        data.interview_stats.forEach(stat => {
+        data.interview_stats.forEach(function(stat) {
             const tr = document.createElement('tr');
             tr.innerHTML = `
                 <td>${stat.title}</td>

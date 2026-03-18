@@ -60,7 +60,7 @@ def init_db():
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             interview_id INTEGER NOT NULL,
             name TEXT NOT NULL,
-            capacity INTEGER DEFAULT 5,
+            capacity INTEGER DEFAULT 1,
             FOREIGN KEY (interview_id) REFERENCES interviews(id) ON DELETE CASCADE
         )
     ''')
@@ -758,12 +758,17 @@ def create_application():
         conn.close()
         return jsonify({'success': False, 'message': '该时间段已满，请选择其他时间段'})
 
+    # 获取时间段对应的房间ID
+    cursor.execute("SELECT room_id FROM time_slots WHERE id = ?", (time_slot_id,))
+    slot = cursor.fetchone()
+    room_id = slot['room_id'] if slot else None
+
     # 创建报名
     cursor.execute('''
-        INSERT INTO applications (student_id, interview_id, time_slot_id, first_position,
+        INSERT INTO applications (student_id, interview_id, time_slot_id, room_id, first_position,
                                  second_position, phone, accept_adjust)
-        VALUES (?, ?, ?, ?, ?, ?, ?)
-    ''', (user_id, interview_id, time_slot_id, first_position, second_position, phone, accept_adjust))
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+    ''', (user_id, interview_id, time_slot_id, room_id, first_position, second_position, phone, accept_adjust))
     conn.commit()
     conn.close()
 

@@ -97,49 +97,51 @@
 let allInterviews = [];
 let selectedTimeSlotId = null;
 let currentPositions = [];
+let allInterviews = [];
 
 async function loadInterviews() {
     try {
-        const response = await fetch('/api/interviews');
-        const interviews = await response.json();
+        var response = await fetch('/api/interviews');
+        var interviews = await response.json();
         allInterviews = interviews;
 
-        const container = document.getElementById('interviewList');
+        var container = document.getElementById('interviewList');
 
         if (interviews.length === 0) {
-            container.innerHTML = `
-                <div class="empty-state">
-                    <h3>暂无可报名的面试场次</h3>
-                    <p>请留意社团通知，了解最新的招新安排。</p>
-                </div>
-            `;
+            container.innerHTML = '<div class="empty-state"><h3>暂无可报名的面试场次</h3><p>请留意社团通知，了解最新的招新安排。</p></div>';
             return;
         }
 
         // 检查是否已有报名
-        const appsResp = await fetch('/api/applications');
-        const myApps = await appsResp.json();
-        const hasApplied = myApps.length > 0 && myApps.some(a => a.status === 'pending');
+        var appsResp = await fetch('/api/applications');
+        var myApps = await appsResp.json();
+        var hasApplied = false;
+        for (var i = 0; i < myApps.length; i++) {
+            if (myApps[i].status === 'pending') {
+                hasApplied = true;
+                break;
+            }
+        }
 
-        let html = '';
-        interviews.forEach(interview => {
-            const positions = interview.positions ? interview.positions.join('、') : '未设置职位';
-            html += `
-                <div class="card">
-                    <div class="application-header">
-                        <span class="application-title">${interview.title}</span>
-                        ${hasApplied
-                            ? '<span class="badge badge-warning">您已报名</span>'
-                            : `<button class="btn btn-sm btn-primary" onclick="showApplyModal(${interview.id}, '${interview.title}', '${interview.location || ''}', '${interview.positions ? interview.positions.join(',') : ''}')">立即报名</button>`
-                        }
-                    </div>
-                    <p><strong>日期：</strong>${interview.date || '待定'}</p>
-                    <p><strong>地点：</strong>${interview.location || '待定'}</p>
-                    <p><strong>可面试职位：</strong>${positions}</p>
-                    ${interview.note ? `<p><strong>备注：</strong>${interview.note}</p>` : ''}
-                </div>
-            `;
-        });
+        var html = '';
+        for (var i = 0; i < interviews.length; i++) {
+            var interview = interviews[i];
+            var positions = interview.positions ? interview.positions.join('、') : '未设置职位';
+            var btnHtml = hasApplied ? '<span class="badge badge-warning">您已报名</span>' : '<button class="btn btn-sm btn-primary" onclick="showApplyModal(' + interview.id + ', \'' + interview.title + '\', \'' + (interview.location || '') + '\', \'' + (interview.positions ? interview.positions.join(',') : '') + '\')">立即报名</button>';
+
+            html += '<div class="card">';
+            html += '<div class="application-header">';
+            html += '<span class="application-title">' + interview.title + '</span>';
+            html += btnHtml;
+            html += '</div>';
+            html += '<p><strong>日期：</strong>' + (interview.date || '待定') + '</p>';
+            html += '<p><strong>等候区地点：</strong>' + (interview.location || '待定') + '</p>';
+            html += '<p><strong>可面试职位：</strong>' + positions + '</p>';
+            if (interview.note) {
+                html += '<p><strong>备注：</strong>' + interview.note + '</p>';
+            }
+            html += '</div>';
+        }
 
         container.innerHTML = html;
     } catch (error) {
@@ -154,16 +156,16 @@ function showApplyModal(interviewId, title, location, positionsStr) {
     document.getElementById('applyForm').reset();
 
     // 设置职位选项
-    currentPositions = positionsStr ? positionsStr.split(',').filter(p => p) : [];
+    currentPositions = positionsStr ? positionsStr.split(',').filter(function(p) { return p; }) : [];
     const firstSelect = document.getElementById('firstPosition');
     const secondSelect = document.getElementById('secondPosition');
 
     firstSelect.innerHTML = '<option value="">请选择</option>';
     secondSelect.innerHTML = '<option value="">无</option>';
 
-    currentPositions.forEach(p => {
-        firstSelect.innerHTML += `<option value="${p}">${p}</option>`;
-        secondSelect.innerHTML += `<option value="${p}">${p}</option>`;
+    currentPositions.forEach(function(p) {
+        firstSelect.innerHTML += '<option value="' + p + '">' + p + '</option>';
+        secondSelect.innerHTML += '<option value="' + p + '">' + p + '</option>';
     });
 
     // 加载时间段
@@ -174,18 +176,19 @@ function showApplyModal(interviewId, title, location, positionsStr) {
 
 async function loadTimeSlots(interviewId) {
     try {
-        const response = await fetch(`/api/interviews/${interviewId}/time-slots`);
-        const slots = await response.json();
+        var response = await fetch('/api/interviews/' + interviewId + '/time-slots');
+        var slots = await response.json();
 
-        const grid = document.getElementById('timeSlotGrid');
+        var grid = document.getElementById('timeSlotGrid');
         grid.innerHTML = '';
 
-        if (slots.length === 0) {
+        if (!slots || slots.length === 0) {
             grid.innerHTML = '<p style="color:#999;">该场次暂未设置时间段，请联系管理员</p>';
             return;
         }
 
-        slots.forEach(function(slot) {
+        for (var i = 0; i < slots.length; i++) {
+            var slot = slots[i];
             var isFull = slot.is_full;
             var div = document.createElement('div');
             div.className = 'time-slot-item ' + (isFull ? 'full' : '');
@@ -194,7 +197,7 @@ async function loadTimeSlots(interviewId) {
                 div.onclick = function() { selectTimeSlot(slot.id, div); };
             }
             grid.appendChild(div);
-        });
+        }
     } catch (error) {
         console.error('加载时间段失败:', error);
     }
@@ -205,7 +208,10 @@ function selectTimeSlot(slotId, element) {
     document.getElementById('selectedTimeSlot').value = slotId;
 
     // 移除其他选中状态
-    document.querySelectorAll('.time-slot-item').forEach(el => el.classList.remove('selected'));
+    var items = document.querySelectorAll('.time-slot-item');
+    for (var i = 0; i < items.length; i++) {
+        items[i].classList.remove('selected');
+    }
     element.classList.add('selected');
 }
 
@@ -216,32 +222,33 @@ function closeApplyModal() {
 
 async function showMyApplications() {
     try {
-        const response = await fetch('/api/applications');
-        const applications = await response.json();
+        var response = await fetch('/api/applications');
+        var applications = await response.json();
 
-        const container = document.getElementById('myAppsContent');
+        var container = document.getElementById('myAppsContent');
 
         if (applications.length === 0) {
             container.innerHTML = '<p style="text-align:center;color:#999;">您还没有报名任何面试场次</p>';
         } else {
-            let html = '';
-            applications.forEach(app => {
-                const statusText = app.status === 'pending'
-                    ? '<span class="badge badge-info">已报名</span>'
-                    : '<span class="badge badge-danger">已取消</span>';
+            var html = '';
+            for (var i = 0; i < applications.length; i++) {
+                var app = applications[i];
+                var statusText = app.status === 'pending' ? '<span class="badge badge-info">已报名</span>' : '<span class="badge badge-danger">已取消</span>';
+                var roomInfo = app.room_name ? '<p><strong>面试地点：</strong>' + app.room_name + '</p>' : '';
 
-                html += `
-                    <div class="card">
-                        <p><strong>面试场次：</strong>${app.interview_title}</p>
-                        <p><strong>时间段：</strong>${app.start_time} - ${app.end_time}</p>
-                        <p><strong>第一志愿：</strong>${app.first_position}</p>
-                        <p><strong>第二志愿：</strong>${app.second_position || '-'}</p>
-                        <p><strong>联系电话：</strong>${app.phone || '-'}</p>
-                        <p><strong>报名状态：</strong>${statusText}</p>
-                        ${app.status === 'pending' ? `<button class="btn btn-sm btn-danger" onclick="cancelApplication(${app.id})">取消报名</button>` : ''}
-                    </div>
-                `;
-            });
+                html += '<div class="card">';
+                html += '<p><strong>面试场次：</strong>' + app.interview_title + '</p>';
+                html += roomInfo;
+                html += '<p><strong>时间段：</strong>' + app.start_time + ' - ' + app.end_time + '</p>';
+                html += '<p><strong>第一志愿：</strong>' + app.first_position + '</p>';
+                html += '<p><strong>第二志愿：</strong>' + (app.second_position || '-') + '</p>';
+                html += '<p><strong>联系电话：</strong>' + (app.phone || '-') + '</p>';
+                html += '<p><strong>报名状态：</strong>' + statusText + '</p>';
+                if (app.status === 'pending') {
+                    html += '<button class="btn btn-sm btn-danger" onclick="cancelApplication(' + app.id + ')">取消报名</button>';
+                }
+                html += '</div>';
+            }
             container.innerHTML = html;
         }
 
@@ -320,7 +327,7 @@ function showMessage(msg, type) {
     const div = document.getElementById('message');
     div.className = `message ${type}`;
     div.textContent = msg;
-    setTimeout(() => { div.textContent = ''; }, 3000);
+    setTimeout(function() { div.textContent = ''; }, 3000);
 }
 
 // 添加点击我的报名菜单显示
