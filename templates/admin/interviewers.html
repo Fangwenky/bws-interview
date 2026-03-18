@@ -283,12 +283,6 @@ document.getElementById('assignForm').addEventListener('submit', async function(
                 room_id: roomId ? parseInt(roomId) : null
             })
         });
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-                interviewer_id: parseInt(interviewerId),
-                time_slot_id: timeSlotId ? parseInt(timeSlotId) : null
-            })
-        });
         const data = await response.json();
 
         if (data.success) {
