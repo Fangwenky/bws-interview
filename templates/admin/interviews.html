@@ -336,9 +336,6 @@ async function addTimeSlot() {
         loadTimeSlots(interviewId);
         document.getElementById('startTime').value = '';
         document.getElementById('endTime').value = '';
-        } else {
-            alert(data.message || '添加失败');
-        }
     } catch (error) {
         alert('添加失败');
     }
