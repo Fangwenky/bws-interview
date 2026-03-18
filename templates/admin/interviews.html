@@ -60,7 +60,7 @@
                 <input type="date" id="date">
             </div>
             <div class="form-group">
-                <label for="location">面试地点</label>
+                <label for="location">等候区地点</label>
                 <input type="text" id="location" placeholder="如：学生活动中心302">
             </div>
             <div class="form-group">
@@ -83,16 +83,18 @@
 <div class="modal" id="timeSlotModal">
     <div class="modal-content">
         <div class="modal-header">
-            <h3>管理时间段</h3>
+            <h3>管理时间段（每个房间每个时间段最多1人）</h3>
             <button class="modal-close" onclick="closeTimeSlotModal()">&times;</button>
         </div>
         <input type="hidden" id="currentInterviewId">
         <div class="form-group">
-            <label>添加时间段</label>
+            <label>添加时间段（需选择房间）</label>
             <div class="form-row">
+                <select id="slotRoom">
+                    <option value="">选择房间</option>
+                </select>
                 <input type="time" id="startTime" placeholder="开始时间">
                 <input type="time" id="endTime" placeholder="结束时间">
-                <input type="number" id="maxCount" placeholder="人数上限" value="3" min="1" style="width: 100px;">
             </div>
             <button class="btn btn-success btn-sm" onclick="addTimeSlot()">添加</button>
         </div>
@@ -243,8 +245,25 @@ document.getElementById('interviewForm').addEventListener('submit', async functi
 // 时间段管理
 async function manageTimeSlots(interviewId) {
     document.getElementById('currentInterviewId').value = interviewId;
+    // 先加载房间列表
+    await loadRoomsForSlotSelect(interviewId);
     await loadTimeSlots(interviewId);
     document.getElementById('timeSlotModal').classList.add('show');
+}
+
+async function loadRoomsForSlotSelect(interviewId) {
+    try {
+        const response = await fetch(`/api/interviews/${interviewId}/rooms`);
+        const rooms = await response.json();
+
+        const select = document.getElementById('slotRoom');
+        select.innerHTML = '<option value="">选择房间</option>';
+        rooms.forEach(function(r) {
+            select.innerHTML += '<option value="' + r.id + '">' + r.name + '</option>';
+        });
+    } catch (error) {
+        console.error('加载房间失败:', error);
+    }
 }
 
 async function loadTimeSlots(interviewId) {
@@ -254,21 +273,17 @@ async function loadTimeSlots(interviewId) {
 
         const container = document.getElementById('timeSlotList');
         if (slots.length === 0) {
-            container.innerHTML = '<p style="color:#999;">暂无时间段</p>';
+            container.innerHTML = '<p style="color:#999;">暂无时间段，请先添加房间</p>';
             return;
         }
 
-        container.innerHTML = '<table><thead><tr><th>时间段</th><th>人数上限</th><th>已报名</th><th>操作</th></tr></thead><tbody></tbody></table>';
+        container.innerHTML = '<table><thead><tr><th>房间</th><th>时间段</th><th>状态</th><th>操作</th></tr></thead><tbody></tbody></table>';
         const tbody = container.querySelector('tbody');
 
-        slots.forEach(slot => {
-            const tr = document.createElement('tr');
-            tr.innerHTML = `
-                <td>${slot.start_time} - ${slot.end_time}</td>
-                <td>${slot.max_count}</td>
-                <td>${slot.applied_count} / ${slot.max_count}</td>
-                <td><button class="btn btn-sm btn-danger" onclick="deleteTimeSlot(${slot.id})">删除</button></td>
-            `;
+        slots.forEach(function(slot) {
+            var status = slot.is_full ? '<span class="badge badge-danger">已满</span>' : '<span class="badge badge-success">可报名</span>';
+            var tr = document.createElement('tr');
+            tr.innerHTML = '<td>' + (slot.room_name || '-') + '</td><td>' + slot.start_time + ' - ' + slot.end_time + '</td><td>' + status + '</td><td><button class="btn btn-sm btn-danger" onclick="deleteTimeSlot(' + slot.id + ')">删除</button></td>';
             tbody.appendChild(tr);
         });
     } catch (error) {
@@ -278,10 +293,14 @@ async function loadTimeSlots(interviewId) {
 
 async function addTimeSlot() {
     const interviewId = document.getElementById('currentInterviewId').value;
+    const roomId = document.getElementById('slotRoom').value;
     const startTime = document.getElementById('startTime').value;
     const endTime = document.getElementById('endTime').value;
-    const maxCount = parseInt(document.getElementById('maxCount').value) || 3;
 
+    if (!roomId) {
+        alert('请选择房间');
+        return;
+    }
     if (!startTime || !endTime) {
         alert('请填写开始和结束时间');
         return;
@@ -291,7 +310,7 @@ async function addTimeSlot() {
         const response = await fetch(`/api/interviews/${interviewId}/time-slots`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ start_time: startTime, end_time: endTime, max_count: maxCount })
+            body: JSON.stringify({ room_id: parseInt(roomId), start_time: startTime, end_time: endTime })
         });
         const data = await response.json();
 

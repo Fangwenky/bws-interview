@@ -181,20 +181,17 @@ async function loadTimeSlots(interviewId) {
         grid.innerHTML = '';
 
         if (slots.length === 0) {
-            grid.innerHTML = '<p style="color:#999;">该场次暂未设置时间段</p>';
+            grid.innerHTML = '<p style="color:#999;">该场次暂未设置时间段，请联系管理员</p>';
             return;
         }
 
-        slots.forEach(slot => {
-            const isFull = slot.applied_count >= slot.max_count;
-            const div = document.createElement('div');
-            div.className = `time-slot-item ${isFull ? 'full' : ''}`;
-            div.innerHTML = `
-                <div class="time">${slot.start_time} - ${slot.end_time}</div>
-                <div class="count">${slot.applied_count} / ${slot.max_count}人</div>
-            `;
+        slots.forEach(function(slot) {
+            var isFull = slot.is_full;
+            var div = document.createElement('div');
+            div.className = 'time-slot-item ' + (isFull ? 'full' : '');
+            div.innerHTML = '<div class="time">' + (slot.room_name || '房间') + '</div><div class="time">' + slot.start_time + ' - ' + slot.end_time + '</div><div class="count">' + (isFull ? '已满' : '可报名') + '</div>';
             if (!isFull) {
-                div.onclick = () => selectTimeSlot(slot.id, div);
+                div.onclick = function() { selectTimeSlot(slot.id, div); };
             }
             grid.appendChild(div);
         });

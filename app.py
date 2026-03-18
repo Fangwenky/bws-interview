@@ -65,15 +65,16 @@ def init_db():
         )
     ''')
 
-    # 时间段表
+    # 时间段表（绑定房间，每个房间每个时间段最多1人）
     cursor.execute('''
         CREATE TABLE IF NOT EXISTS time_slots (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             interview_id INTEGER NOT NULL,
+            room_id INTEGER,
             start_time TEXT NOT NULL,
             end_time TEXT NOT NULL,
-            max_count INTEGER DEFAULT 3,
-            FOREIGN KEY (interview_id) REFERENCES interviews(id) ON DELETE CASCADE
+            FOREIGN KEY (interview_id) REFERENCES interviews(id) ON DELETE CASCADE,
+            FOREIGN KEY (room_id) REFERENCES rooms(id) ON DELETE CASCADE
         )
     ''')
 
@@ -435,26 +436,31 @@ def delete_interview(interview_id):
 @app.route('/api/interviews/<int:interview_id>/time-slots', methods=['GET'])
 @login_required
 def get_time_slots(interview_id):
-    """获取面试场次的时间段"""
+    """获取面试场次的时间段（含房间信息）"""
     conn = get_db_connection()
     cursor = conn.cursor()
 
-    # 获取时间段
-    cursor.execute(
-        "SELECT * FROM time_slots WHERE interview_id = ? ORDER BY start_time",
-        (interview_id,)
-    )
+    # 获取时间段（包含房间信息）
+    cursor.execute('''
+        SELECT ts.*, r.name as room_name
+        FROM time_slots ts
+        LEFT JOIN rooms r ON ts.room_id = r.id
+        WHERE ts.interview_id = ?
+        ORDER BY ts.start_time
+    ''', (interview_id,))
     time_slots = cursor.fetchall()
 
     result = []
     for slot in time_slots:
         item = dict(slot)
-        # 计算已报名人数
+        # 计算已报名人数（每个时间段最多1人）
         cursor.execute(
             "SELECT COUNT(*) FROM applications WHERE time_slot_id = ? AND status = 'pending'",
             (slot['id'],)
         )
         item['applied_count'] = cursor.fetchone()[0]
+        # 该时间段是否已满（每个房间每个时间段最多1人）
+        item['is_full'] = item['applied_count'] >= 1
         result.append(item)
 
     conn.close()
@@ -465,20 +471,33 @@ def get_time_slots(interview_id):
 @login_required
 @role_required('admin')
 def create_time_slot(interview_id):
-    """添加时间段"""
+    """添加时间段（绑定房间）"""
     data = request.get_json()
     start_time = data.get('start_time', '').strip()
     end_time = data.get('end_time', '').strip()
-    max_count = data.get('max_count', 3)
+    room_id = data.get('room_id')
 
     if not start_time or not end_time:
         return jsonify({'success': False, 'message': '请填写开始和结束时间'})
 
+    if not room_id:
+        return jsonify({'success': False, 'message': '请选择房间'})
+
     conn = get_db_connection()
     cursor = conn.cursor()
+
+    # 检查该房间该时间段是否已存在
     cursor.execute(
-        "INSERT INTO time_slots (interview_id, start_time, end_time, max_count) VALUES (?, ?, ?, ?)",
-        (interview_id, start_time, end_time, max_count)
+        "SELECT id FROM time_slots WHERE interview_id = ? AND room_id = ? AND start_time = ?",
+        (interview_id, room_id, start_time)
+    )
+    if cursor.fetchone():
+        conn.close()
+        return jsonify({'success': False, 'message': '该房间该时间段已存在'})
+
+    cursor.execute(
+        "INSERT INTO time_slots (interview_id, room_id, start_time, end_time) VALUES (?, ?, ?, ?)",
+        (interview_id, room_id, start_time, end_time)
     )
     conn.commit()
     conn.close()
