@@ -114,15 +114,16 @@ async function loadInterviews() {
             return;
         }
 
-        // 检查是否已有报名
+        // 获取该学生的报名记录
         var appsResp = await fetch('/api/applications');
         var myApps = await appsResp.json();
-        var hasApplied = false;
+
+        // 建立已报名场次的映射
+        var appliedInterviews = {};
         if (myApps && myApps.length > 0) {
             for (var i = 0; i < myApps.length; i++) {
                 if (myApps[i].status === 'pending') {
-                    hasApplied = true;
-                    break;
+                    appliedInterviews[myApps[i].interview_id] = myApps[i];
                 }
             }
         }
@@ -146,7 +147,16 @@ async function loadInterviews() {
                 positions = '未设置职位';
                 positionsStr = '';
             }
-            var btnHtml = hasApplied ? '<span class="badge badge-warning">您已报名</span>' : '<button class="btn btn-sm btn-primary" onclick="showApplyModal(' + interview.id + ', \'' + interview.title + '\', \'' + (interview.location || '') + '\', \'' + positionsStr + '\')">立即报名</button>';
+
+            // 检查是否已报名该场次
+            var hasAppliedThis = appliedInterviews[interview.id] ? true : false;
+            var btnHtml = '';
+            if (hasAppliedThis) {
+                var app = appliedInterviews[interview.id];
+                btnHtml = '<span class="badge badge-success">已报名 ' + (app.room_name || '') + ' ' + app.start_time + '-' + app.end_time + '</span> <button class="btn btn-sm btn-danger" onclick="cancelApplication(' + app.id + ')">取消</button>';
+            } else {
+                btnHtml = '<button class="btn btn-sm btn-primary" onclick="showApplyModal(' + interview.id + ', \'' + interview.title + '\', \'' + (interview.location || '') + '\', \'' + positionsStr + '\')">立即报名</button>';
+            }
 
             html += '<div class="card">';
             html += '<div class="application-header">';

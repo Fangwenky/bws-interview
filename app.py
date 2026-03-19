@@ -738,14 +738,14 @@ def create_application():
     conn = get_db_connection()
     cursor = conn.cursor()
 
-    # 检查是否已报名（同一学生只能报名一个场次）
+    # 检查该学生是否已报名该时间段（同一时间段只能报一次）
     cursor.execute(
-        "SELECT * FROM applications WHERE student_id = ? AND status = 'pending'",
-        (user_id,)
+        "SELECT * FROM applications WHERE student_id = ? AND time_slot_id = ? AND status = 'pending'",
+        (user_id, time_slot_id)
     )
     if cursor.fetchone():
         conn.close()
-        return jsonify({'success': False, 'message': '您已报名其他面试场次，每人只能报名一个场次'})
+        return jsonify({'success': False, 'message': '您已报名该时间段'})
 
     # 检查时间段是否已满（每个时间段最多1人）
     cursor.execute(
@@ -863,11 +863,25 @@ def create_interview_result(app_id):
         conn.close()
         return jsonify({'success': False, 'message': '您没有权限评分此面试者'})
 
-    # 插入或更新面试结果
+    # 检查是否已有评分，有则更新，无则插入
     cursor.execute('''
-        INSERT INTO interview_results (application_id, interviewer_id, attendance, result, comment)
-        VALUES (?, ?, ?, ?, ?)
-    ''', (app_id, user_id, attendance, result, comment))
+        SELECT id FROM interview_results WHERE application_id = ? AND interviewer_id = ?
+    ''', (app_id, user_id))
+    existing = cursor.fetchone()
+
+    if existing:
+        # 更新
+        cursor.execute('''
+            UPDATE interview_results SET attendance = ?, result = ?, comment = ?, created_at = CURRENT_TIMESTAMP
+            WHERE application_id = ? AND interviewer_id = ?
+        ''', (attendance, result, comment, app_id, user_id))
+    else:
+        # 插入
+        cursor.execute('''
+            INSERT INTO interview_results (application_id, interviewer_id, attendance, result, comment)
+            VALUES (?, ?, ?, ?, ?)
+        ''', (app_id, user_id, attendance, result, comment))
+
     conn.commit()
     conn.close()
 
