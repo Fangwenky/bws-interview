@@ -104,6 +104,9 @@ def init_db():
             first_position TEXT,
             second_position TEXT,
             phone TEXT,
+            wechat TEXT,
+            qq TEXT,
+            email TEXT,
             accept_adjust INTEGER DEFAULT 0,
             status TEXT DEFAULT 'pending' CHECK(status IN ('pending', 'cancelled')),
             created_at TEXT DEFAULT CURRENT_TIMESTAMP,
@@ -727,6 +730,9 @@ def create_application():
     first_position = data.get('first_position', '').strip()
     second_position = data.get('second_position', '').strip()
     phone = data.get('phone', '').strip()
+    wechat = data.get('wechat', '').strip()
+    qq = data.get('qq', '').strip()
+    email = data.get('email', '').strip()
     accept_adjust = 1 if data.get('accept_adjust') else 0
 
     # 验证
@@ -766,9 +772,9 @@ def create_application():
     # 创建报名
     cursor.execute('''
         INSERT INTO applications (student_id, interview_id, time_slot_id, room_id, first_position,
-                                 second_position, phone, accept_adjust)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-    ''', (user_id, interview_id, time_slot_id, room_id, first_position, second_position, phone, accept_adjust))
+                                 second_position, phone, wechat, qq, email, accept_adjust)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    ''', (user_id, interview_id, time_slot_id, room_id, first_position, second_position, phone, wechat, qq, email, accept_adjust))
     conn.commit()
     conn.close()
 
@@ -1092,8 +1098,12 @@ def export_data():
         SELECT
             u.name as 学生姓名,
             u.username as 学号,
-            a.phone as 联系电话,
+            a.phone as 手机号,
+            a.wechat as 微信号,
+            a.qq as QQ号,
+            a.email as 邮箱,
             i.title as 面试场次,
+            r.name as 面试房间,
             ts.start_time as 开始时间,
             ts.end_time as 结束时间,
             a.first_position as 第一志愿,
@@ -1108,6 +1118,7 @@ def export_data():
         JOIN users u ON a.student_id = u.id
         JOIN interviews i ON a.interview_id = i.id
         JOIN time_slots ts ON a.time_slot_id = ts.id
+        LEFT JOIN rooms r ON a.room_id = r.id
         LEFT JOIN interview_results ir ON a.id = ir.application_id
         ORDER BY i.title, ts.start_time
     ''')

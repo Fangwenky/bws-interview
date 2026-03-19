@@ -30,6 +30,7 @@
                 <tr>
                     <th>姓名</th>
                     <th>学号</th>
+                    <th>联系方式</th>
                     <th>面试场次</th>
                     <th>时间段</th>
                     <th>第一志愿</th>
@@ -93,10 +94,16 @@ async function loadResults() {
             if (app.status === 'pending') statusText = '<span class="badge badge-info">已报名</span>';
             else if (app.status === 'cancelled') statusText = '<span class="badge badge-danger">已取消</span>';
 
+            var contactInfo = app.phone || '-';
+            if (app.wechat) contactInfo += '<br>微:' + app.wechat;
+            if (app.qq) contactInfo += ' QQ:' + app.qq;
+            if (app.email) contactInfo += '<br>邮箱:' + app.email;
+
             const tr = document.createElement('tr');
             tr.innerHTML = `
                 <td>${app.student_name}</td>
                 <td>${app.student_number}</td>
+                <td>${contactInfo}</td>
                 <td>${app.interview_title}</td>
                 <td>${app.start_time} - ${app.end_time}</td>
                 <td>${app.first_position || '-'}</td>
@@ -131,7 +138,10 @@ async function showDetail(appId) {
             <div class="card">
                 <p><strong>姓名：</strong>${app.student_name}</p>
                 <p><strong>学号：</strong>${app.student_number}</p>
-                <p><strong>联系电话：</strong>${app.phone || '-'}</p>
+                <p><strong>手机号：</strong>${app.phone || '-'}</p>
+                <p><strong>微信号：</strong>${app.wechat || '-'}</p>
+                <p><strong>QQ号：</strong>${app.qq || '-'}</p>
+                <p><strong>邮箱：</strong>${app.email || '-'}</p>
                 <p><strong>面试场次：</strong>${app.interview_title}</p>
                 <p><strong>时间段：</strong>${app.start_time} - ${app.end_time}</p>
                 <p><strong>第一志愿：</strong>${app.first_position}</p>

@@ -115,6 +115,7 @@ async function loadApplications() {
                             <tr>
                                 <th>姓名</th>
                                 <th>学号</th>
+                                <th>联系方式</th>
                                 <th>志愿职位</th>
                                 <th>是否接受调剂</th>
                                 <th>报名状态</th>
@@ -146,21 +147,25 @@ async function loadApplications() {
                     ? '<span class="badge badge-info">已报名</span>'
                     : '<span class="badge badge-danger">已取消</span>';
 
-                html += `
-                    <tr>
-                        <td>${student.student_name}</td>
-                        <td>${student.student_number}</td>
-                        <td>${student.first_position}${student.second_position ? '<br><small>第二志愿：' + student.second_position + '</small>' : ''}</td>
-                        <td>${student.accept_adjust ? '是' : '否'}</td>
-                        <td>${statusHtml}</td>
-                        <td>${resultHtml}</td>
-                        <td>
-                            ${student.status === 'pending' && canScore
-                                ? `<button class="btn btn-sm btn-primary" onclick="showScoreModal(${student.id}, '${student.student_name}', '${student.student_number}', '${student.first_position}${student.second_position ? ' / ' + student.second_position : ''}')">评分</button>`
-                                : '-'}
-                        </td>
-                    </tr>
-                `;
+                var contactInfo = student.phone || '-';
+                if (student.wechat) contactInfo += '<br>微:' + student.wechat;
+                if (student.qq) contactInfo += ' QQ:' + student.qq;
+                if (student.email) contactInfo += '<br>邮箱:' + student.email;
+
+                html += '<tr>';
+                html += '<td>' + student.student_name + '</td>';
+                html += '<td>' + student.student_number + '</td>';
+                html += '<td>' + contactInfo + '</td>';
+                html += '<td>' + student.first_position + (student.second_position ? '<br><small>第二志愿：' + student.second_position + '</small>' : '') + '</td>';
+                html += '<td>' + (student.accept_adjust ? '是' : '否') + '</td>';
+                html += '<td>' + statusHtml + '</td>';
+                html += '<td>' + resultHtml + '</td>';
+                if (student.status === 'pending' && canScore) {
+                    html += '<td><button class="btn btn-sm btn-primary" onclick="showScoreModal(' + student.id + ', \'' + student.student_name + '\', \'' + student.student_number + '\', \'' + student.first_position + (student.second_position ? ' / ' + student.second_position : '') + '\')">评分</button></td>';
+                } else {
+                    html += '<td>-</td>';
+                }
+                html += '</tr>';
             }
 
             html += `

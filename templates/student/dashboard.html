@@ -61,8 +61,23 @@
             </div>
 
             <div class="form-group">
-                <label for="phone">联系电话 *</label>
+                <label for="phone">手机号 *</label>
                 <input type="tel" id="phone" required placeholder="请输入手机号码">
+            </div>
+
+            <div class="form-group">
+                <label for="wechat">微信号</label>
+                <input type="text" id="wechat" placeholder="请输入微信号">
+            </div>
+
+            <div class="form-group">
+                <label for="qq">QQ号</label>
+                <input type="text" id="qq" placeholder="请输入QQ号">
+            </div>
+
+            <div class="form-group">
+                <label for="email">邮箱</label>
+                <input type="email" id="email" placeholder="请输入邮箱">
             </div>
 
             <div class="form-group">
@@ -274,7 +289,10 @@ async function showMyApplications() {
                 html += '<p><strong>时间段：</strong>' + app.start_time + ' - ' + app.end_time + '</p>';
                 html += '<p><strong>第一志愿：</strong>' + app.first_position + '</p>';
                 html += '<p><strong>第二志愿：</strong>' + (app.second_position || '-') + '</p>';
-                html += '<p><strong>联系电话：</strong>' + (app.phone || '-') + '</p>';
+                html += '<p><strong>手机号：</strong>' + (app.phone || '-') + '</p>';
+                if (app.wechat) html += '<p><strong>微信号：</strong>' + app.wechat + '</p>';
+                if (app.qq) html += '<p><strong>QQ号：</strong>' + app.qq + '</p>';
+                if (app.email) html += '<p><strong>邮箱：</strong>' + app.email + '</p>';
                 html += '<p><strong>报名状态：</strong>' + statusText + '</p>';
                 if (app.status === 'pending') {
                     html += '<button class="btn btn-sm btn-danger" onclick="cancelApplication(' + app.id + ')">取消报名</button>';
@@ -321,6 +339,9 @@ document.getElementById('applyForm').addEventListener('submit', async function(e
     const firstPosition = document.getElementById('firstPosition').value;
     const secondPosition = document.getElementById('secondPosition').value;
     const phone = document.getElementById('phone').value.trim();
+    const wechat = document.getElementById('wechat').value.trim();
+    const qq = document.getElementById('qq').value.trim();
+    const email = document.getElementById('email').value.trim();
     const acceptAdjust = document.getElementById('acceptAdjust').checked;
 
     if (!timeSlotId) {
@@ -338,6 +359,9 @@ document.getElementById('applyForm').addEventListener('submit', async function(e
                 first_position: firstPosition,
                 second_position: secondPosition,
                 phone: phone,
+                wechat: wechat,
+                qq: qq,
+                email: email,
                 accept_adjust: acceptAdjust
             })
         });
