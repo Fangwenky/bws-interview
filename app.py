@@ -14,7 +14,7 @@ from flask import Flask, render_template, request, jsonify, session, redirect, u
 from functools import wraps
 
 # 创建Flask应用
-app = Flask(__name__, static_url_path='/interview/static')
+app = Flask(__name__, static_folder='static', static_url_path='/static')
 app.secret_key = 'bws-interview-secret-key-2025'  # 用于session加密
 
 # 数据库路径
