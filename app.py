@@ -1124,16 +1124,18 @@ def export_data():
     ''')
 
     rows = cursor.fetchall()
+    # 获取列名
+    columns = [description[0] for description in cursor.description]
     conn.close()
 
     # 生成CSV
     output = io.StringIO()
     if rows:
         # 写入表头
-        output.write(','.join(rows[0].keys()) + '\n')
+        output.write(','.join(columns) + '\n')
         # 写入数据
         for row in rows:
-            values = [str(v) if v is not None else '' for v in row.values()]
+            values = [str(v) if v is not None else '' for v in list(row)]
             # 处理包含逗号的值
             values = [v.replace(',', '，') for v in values]
             output.write(','.join(values) + '\n')
